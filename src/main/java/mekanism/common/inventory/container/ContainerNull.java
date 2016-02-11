@@ -13,22 +13,40 @@ public class ContainerNull extends Container
 	{
 		tileEntity = tile;
 
-		tileEntity.open(player);
-		tileEntity.openInventory();
+		if(tileEntity != null)
+		{
+			tileEntity.open(player);
+			tileEntity.openInventory();
+		}
 	}
+	
+	public ContainerNull(TileEntityContainerBlock tile)
+	{
+		tileEntity = tile;
+	}
+	
+	public ContainerNull() {}
 
 	@Override
 	public void onContainerClosed(EntityPlayer entityplayer)
 	{
 		super.onContainerClosed(entityplayer);
 
-		tileEntity.close(entityplayer);
-		tileEntity.closeInventory();
+		if(tileEntity != null)
+		{
+			tileEntity.close(entityplayer);
+			tileEntity.closeInventory();
+		}
 	}
 
 	@Override
 	public boolean canInteractWith(EntityPlayer entityplayer)
 	{
-		return tileEntity.isUseableByPlayer(entityplayer);
+		if(tileEntity != null)
+		{
+			return tileEntity.isUseableByPlayer(entityplayer);
+		}
+		
+		return true;
 	}
 }

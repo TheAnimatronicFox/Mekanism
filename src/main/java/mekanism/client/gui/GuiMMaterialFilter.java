@@ -4,13 +4,14 @@ import mekanism.api.Coord4D;
 import mekanism.api.EnumColor;
 import mekanism.client.sound.SoundHandler;
 import mekanism.common.Mekanism;
+import mekanism.common.content.miner.MMaterialFilter;
 import mekanism.common.inventory.container.ContainerFilter;
-import mekanism.common.miner.MMaterialFilter;
 import mekanism.common.network.PacketDigitalMinerGui.DigitalMinerGuiMessage;
 import mekanism.common.network.PacketDigitalMinerGui.MinerGuiPacket;
 import mekanism.common.network.PacketEditFilter.EditFilterMessage;
 import mekanism.common.network.PacketNewFilter.NewFilterMessage;
 import mekanism.common.tile.TileEntityDigitalMiner;
+import mekanism.common.util.LangUtils;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.MekanismUtils.ResourceType;
 
@@ -37,13 +38,13 @@ public class GuiMMaterialFilter extends GuiMekanism
 
 	public MMaterialFilter filter = new MMaterialFilter();
 
-	public String status = EnumColor.DARK_GREEN + MekanismUtils.localize("gui.allOK");
+	public String status = EnumColor.DARK_GREEN + LangUtils.localize("gui.allOK");
 
 	public int ticker;
 
 	public GuiMMaterialFilter(EntityPlayer player, TileEntityDigitalMiner tentity, int index)
 	{
-		super(new ContainerFilter(player.inventory, tentity));
+		super(tentity, new ContainerFilter(player.inventory, tentity));
 		tileEntity = tentity;
 
 		origFilter = (MMaterialFilter)tileEntity.filters.get(index);
@@ -52,7 +53,7 @@ public class GuiMMaterialFilter extends GuiMekanism
 
 	public GuiMMaterialFilter(EntityPlayer player, TileEntityDigitalMiner tentity)
 	{
-		super(new ContainerFilter(player.inventory, tentity));
+		super(tentity, new ContainerFilter(player.inventory, tentity));
 		tileEntity = tentity;
 
 		isNew = true;
@@ -67,8 +68,8 @@ public class GuiMMaterialFilter extends GuiMekanism
 		int guiHeight = (height - ySize) / 2;
 
 		buttonList.clear();
-		buttonList.add(new GuiButton(0, guiWidth + 27, guiHeight + 62, 60, 20, MekanismUtils.localize("gui.save")));
-		buttonList.add(new GuiButton(1, guiWidth + 89, guiHeight + 62, 60, 20, MekanismUtils.localize("gui.delete")));
+		buttonList.add(new GuiButton(0, guiWidth + 27, guiHeight + 62, 60, 20, LangUtils.localize("gui.save")));
+		buttonList.add(new GuiButton(1, guiWidth + 89, guiHeight + 62, 60, 20, LangUtils.localize("gui.delete")));
 
 		if(isNew)
 		{
@@ -97,7 +98,7 @@ public class GuiMMaterialFilter extends GuiMekanism
 			}
 			else if(filter.materialItem == null)
 			{
-				status = EnumColor.DARK_RED + MekanismUtils.localize("gui.itemFilter.noItem");
+				status = EnumColor.DARK_RED + LangUtils.localize("gui.itemFilter.noItem");
 				ticker = 20;
 			}
 		}
@@ -114,9 +115,9 @@ public class GuiMMaterialFilter extends GuiMekanism
 		int xAxis = (mouseX - (width - xSize) / 2);
 		int yAxis = (mouseY - (height - ySize) / 2);
 
-		fontRendererObj.drawString((isNew ? MekanismUtils.localize("gui.new") : MekanismUtils.localize("gui.edit")) + " " + MekanismUtils.localize("gui.materialFilter"), 43, 6, 0x404040);
-		fontRendererObj.drawString(MekanismUtils.localize("gui.status") + ": " + status, 35, 20, 0x00CD00);
-		fontRendererObj.drawString(MekanismUtils.localize("gui.materialFilter.details") + ":", 35, 32, 0x00CD00);
+		fontRendererObj.drawString((isNew ? LangUtils.localize("gui.new") : LangUtils.localize("gui.edit")) + " " + LangUtils.localize("gui.materialFilter"), 43, 6, 0x404040);
+		fontRendererObj.drawString(LangUtils.localize("gui.status") + ": " + status, 35, 20, 0x00CD00);
+		fontRendererObj.drawString(LangUtils.localize("gui.materialFilter.details") + ":", 35, 32, 0x00CD00);
 
 		if(filter.materialItem != null)
 		{
@@ -130,6 +131,20 @@ public class GuiMMaterialFilter extends GuiMekanism
 			itemRender.renderItemAndEffectIntoGUI(fontRendererObj, mc.getTextureManager(), filter.materialItem, 12, 19);
 			GL11.glDisable(GL11.GL_LIGHTING);
 			GL11.glPopMatrix();
+		}
+		
+		if(filter.replaceStack != null)
+		{
+			GL11.glPushMatrix();
+			GL11.glEnable(GL11.GL_LIGHTING);
+			itemRender.renderItemAndEffectIntoGUI(fontRendererObj, mc.getTextureManager(), filter.replaceStack, 149, 19);
+			GL11.glDisable(GL11.GL_LIGHTING);
+			GL11.glPopMatrix();
+		}
+		
+		if(xAxis >= 148 && xAxis <= 162 && yAxis >= 45 && yAxis <= 59)
+		{
+			drawCreativeTabHoveringText(LangUtils.localize("gui.digitalMiner.requireReplace") + ": " + LangUtils.transYesNo(filter.requireStack), xAxis, yAxis);
 		}
 
 		super.drawGuiContainerForegroundLayer(mouseX, mouseY);
@@ -145,7 +160,7 @@ public class GuiMMaterialFilter extends GuiMekanism
 			ticker--;
 		}
 		else {
-			status = EnumColor.DARK_GREEN + MekanismUtils.localize("gui.allOK");
+			status = EnumColor.DARK_GREEN + LangUtils.localize("gui.allOK");
 		}
 	}
 
@@ -170,6 +185,14 @@ public class GuiMMaterialFilter extends GuiMekanism
 		else {
 			drawTexturedModalRect(guiWidth + 5, guiHeight + 5, 176, 11, 11, 11);
 		}
+		
+		if(xAxis >= 148 && xAxis <= 162 && yAxis >= 45 && yAxis <= 59)
+		{
+			drawTexturedModalRect(guiWidth + 148, guiHeight + 45, 176 + 23, 0, 14, 14);
+		}
+		else {
+			drawTexturedModalRect(guiWidth + 148, guiHeight + 45, 176 + 23, 14, 14, 14);
+		}
 
 		if(xAxis >= 12 && xAxis <= 28 && yAxis >= 19 && yAxis <= 35)
 		{
@@ -183,6 +206,21 @@ public class GuiMMaterialFilter extends GuiMekanism
 
 			GL11.glEnable(GL11.GL_LIGHTING);
 			GL11.glEnable(GL11.GL_DEPTH_TEST);
+			GL11.glPopMatrix();
+		}
+		
+		if(xAxis >= 149 && xAxis <= 165 && yAxis >= 19 && yAxis <= 35)
+		{
+			GL11.glPushMatrix();
+			GL11.glPushAttrib(GL11.GL_LIGHTING_BIT);
+			GL11.glDisable(GL11.GL_LIGHTING);
+			GL11.glDisable(GL11.GL_DEPTH_TEST);
+
+			int x = guiWidth + 149;
+			int y = guiHeight + 19;
+			drawGradientRect(x, y, x + 16, y + 16, -2130706433, -2130706433);
+
+			GL11.glPopAttrib();
 			GL11.glPopMatrix();
 		}
 	}
@@ -201,6 +239,12 @@ public class GuiMMaterialFilter extends GuiMekanism
 			{
                 SoundHandler.playSound("gui.button.press");
 				Mekanism.packetHandler.sendToServer(new DigitalMinerGuiMessage(MinerGuiPacket.SERVER, Coord4D.get(tileEntity), isNew ? 5 : 0, 0, 0));
+			}
+			
+			if(xAxis >= 148 && xAxis <= 162 && yAxis >= 45 && yAxis <= 59)
+			{
+				SoundHandler.playSound("gui.button.press");
+				filter.requireStack = !filter.requireStack;
 			}
 
 			if(xAxis >= 12 && xAxis <= 28 && yAxis >= 19 && yAxis <= 35)
@@ -221,6 +265,36 @@ public class GuiMMaterialFilter extends GuiMekanism
 				else if(stack == null && Keyboard.isKeyDown(Keyboard.KEY_LSHIFT))
 				{
 					filter.materialItem = null;
+				}
+
+                SoundHandler.playSound("gui.button.press");
+			}
+			
+			if(xAxis >= 149 && xAxis <= 165 && yAxis >= 19 && yAxis <= 35)
+			{
+				boolean doNull = false;
+				ItemStack stack = mc.thePlayer.inventory.getItemStack();
+				ItemStack toUse = null;
+
+				if(stack != null && !Keyboard.isKeyDown(Keyboard.KEY_LSHIFT))
+				{
+					if(stack.getItem() instanceof ItemBlock)
+					{
+						if(Block.getBlockFromItem(stack.getItem()) != Blocks.bedrock)
+						{
+							toUse = stack.copy();
+							toUse.stackSize = 1;
+						}
+					}
+				}
+				else if(stack == null && Keyboard.isKeyDown(Keyboard.KEY_LSHIFT))
+				{
+					doNull = true;
+				}
+
+				if(toUse != null || doNull)
+				{
+					filter.replaceStack = toUse;
 				}
 
                 SoundHandler.playSound("gui.button.press");

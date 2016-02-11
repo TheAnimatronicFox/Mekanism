@@ -8,6 +8,7 @@ import mekanism.api.gas.GasRegistry;
 import mekanism.api.gas.GasStack;
 import mekanism.client.gui.GuiRotaryCondensentrator;
 import mekanism.common.ObfuscatedNames;
+import mekanism.common.util.LangUtils;
 import mekanism.common.util.MekanismUtils;
 
 import net.minecraft.client.gui.inventory.GuiContainer;
@@ -35,7 +36,7 @@ public class RotaryCondensentratorRecipeHandler extends BaseRecipeHandler
 	@Override
 	public String getRecipeName()
 	{
-		return MekanismUtils.localize("nei.rotaryCondensentrator");
+		return LangUtils.localize("nei.rotaryCondensentrator");
 	}
 
 	@Override
@@ -92,7 +93,7 @@ public class RotaryCondensentratorRecipeHandler extends BaseRecipeHandler
 			displayGauge(58, 134-xOffset, 14-yOffset, 176, 40, 58, recipe.fluidStack, null);
 		}
 
-		drawString(recipe.type ? MekanismUtils.localize("gui.condensentrating") : MekanismUtils.localize("gui.decondensentrating"), 6-xOffset, 74-yOffset, 0x404040, false);
+		drawString(recipe.type ? LangUtils.localize("gui.condensentrating") : LangUtils.localize("gui.decondensentrating"), 6-xOffset, 74-yOffset, 0x404040, false);
 	}
 
 	@Override
@@ -184,11 +185,11 @@ public class RotaryCondensentratorRecipeHandler extends BaseRecipeHandler
 
 		if(xAxis >= 26 && xAxis <= 42 && yAxis >= 14+4 && yAxis <= 72+4)
 		{
-			currenttip.add(((CachedIORecipe)arecipes.get(recipe)).gasStack.getGas().getLocalizedName());
+			currenttip.add(LangUtils.localizeGasStack(((CachedIORecipe)arecipes.get(recipe)).gasStack));
 		}
 		else if(xAxis >= 134 && xAxis <= 150 && yAxis >= 14+4 && yAxis <= 72+4)
 		{
-			currenttip.add(((CachedIORecipe)arecipes.get(recipe)).fluidStack.getFluid().getLocalizedName());
+			currenttip.add(LangUtils.localizeFluidStack(((CachedIORecipe)arecipes.get(recipe)).fluidStack));
 		}
 
 		return super.handleTooltip(gui, currenttip, recipe);

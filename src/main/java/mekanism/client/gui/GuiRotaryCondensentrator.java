@@ -4,29 +4,38 @@ import java.util.ArrayList;
 import java.util.List;
 
 import mekanism.api.Coord4D;
-import mekanism.api.ListUtils;
 import mekanism.api.gas.GasTank;
-import mekanism.client.gui.GuiEnergyInfo.IInfoHandler;
-import mekanism.client.gui.GuiFluidGauge.IFluidInfoHandler;
-import mekanism.client.gui.GuiGasGauge.IGasInfoHandler;
-import mekanism.client.gui.GuiProgress.IProgressInfoHandler;
-import mekanism.client.gui.GuiProgress.ProgressBar;
-import mekanism.client.gui.GuiSlot.SlotOverlay;
-import mekanism.client.gui.GuiSlot.SlotType;
+import mekanism.api.util.ListUtils;
+import mekanism.client.gui.element.GuiEnergyInfo;
+import mekanism.client.gui.element.GuiFluidGauge;
+import mekanism.client.gui.element.GuiGasGauge;
+import mekanism.client.gui.element.GuiGauge;
+import mekanism.client.gui.element.GuiProgress;
+import mekanism.client.gui.element.GuiRedstoneControl;
+import mekanism.client.gui.element.GuiSlot;
+import mekanism.client.gui.element.GuiUpgradeTab;
+import mekanism.client.gui.element.GuiEnergyInfo.IInfoHandler;
+import mekanism.client.gui.element.GuiFluidGauge.IFluidInfoHandler;
+import mekanism.client.gui.element.GuiGasGauge.IGasInfoHandler;
+import mekanism.client.gui.element.GuiProgress.IProgressInfoHandler;
+import mekanism.client.gui.element.GuiProgress.ProgressBar;
+import mekanism.client.gui.element.GuiSlot.SlotOverlay;
+import mekanism.client.gui.element.GuiSlot.SlotType;
 import mekanism.client.sound.SoundHandler;
 import mekanism.common.Mekanism;
 import mekanism.common.inventory.container.ContainerRotaryCondensentrator;
 import mekanism.common.network.PacketTileEntity.TileEntityMessage;
 import mekanism.common.tile.TileEntityRotaryCondensentrator;
+import mekanism.common.util.LangUtils;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.MekanismUtils.ResourceType;
-
 import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraftforge.fluids.FluidTank;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
 
 import org.lwjgl.opengl.GL11;
+
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
 
 @SideOnly(Side.CLIENT)
 public class GuiRotaryCondensentrator extends GuiMekanism
@@ -35,10 +44,11 @@ public class GuiRotaryCondensentrator extends GuiMekanism
 
 	public GuiRotaryCondensentrator(InventoryPlayer inventory, TileEntityRotaryCondensentrator tentity)
 	{
-		super(new ContainerRotaryCondensentrator(inventory, tentity));
+		super(tentity, new ContainerRotaryCondensentrator(inventory, tentity));
 		tileEntity = tentity;
 
 		guiElements.add(new GuiRedstoneControl(this, tileEntity, MekanismUtils.getResource(ResourceType.GUI, "GuiRotaryCondensentrator.png")));
+		guiElements.add(new GuiUpgradeTab(this, tileEntity, MekanismUtils.getResource(ResourceType.GUI, "GuiRotaryCondensentrator.png")));
 		guiElements.add(new GuiSlot(SlotType.NORMAL, this, MekanismUtils.getResource(ResourceType.GUI, "GuiRotaryCondensentrator.png"), 4, 24).with(SlotOverlay.PLUS));
 		guiElements.add(new GuiSlot(SlotType.NORMAL, this, MekanismUtils.getResource(ResourceType.GUI, "GuiRotaryCondensentrator.png"), 4, 55).with(SlotOverlay.MINUS));
 
@@ -51,10 +61,10 @@ public class GuiRotaryCondensentrator extends GuiMekanism
 			@Override
 			public List<String> getInfo()
 			{
-				String multiplier = MekanismUtils.getEnergyDisplay(tileEntity.ENERGY_USAGE);
-				return ListUtils.asList("Using: " + multiplier + "/t", "Needed: " + MekanismUtils.getEnergyDisplay(tileEntity.getMaxEnergy()-tileEntity.getEnergy()));
+				String usage = MekanismUtils.getEnergyDisplay(tileEntity.clientEnergyUsed);
+				return ListUtils.asList(LangUtils.localize("gui.using") + ": " + usage + "/t", LangUtils.localize("gui.needed") + ": " + MekanismUtils.getEnergyDisplay(tileEntity.getMaxEnergy()-tileEntity.getEnergy()));
 			}
-		}, this, MekanismUtils.getResource(ResourceType.GUI, "GuiChemicalWasher.png")));
+		}, this, MekanismUtils.getResource(ResourceType.GUI, "GuiRotaryCondensentrator.png")));
 		guiElements.add(new GuiFluidGauge(new IFluidInfoHandler() {
 			@Override
 			public FluidTank getTank()
@@ -98,7 +108,6 @@ public class GuiRotaryCondensentrator extends GuiMekanism
 				return tileEntity.mode == 1;
 			}
 		}, ProgressBar.LARGE_LEFT, this, MekanismUtils.getResource(ResourceType.GUI, "GuiRotaryCondensentrator.png"), 62, 38));
-
 	}
 
 	@Override
@@ -107,8 +116,8 @@ public class GuiRotaryCondensentrator extends GuiMekanism
 		int xAxis = (mouseX - (width - xSize) / 2);
 		int yAxis = (mouseY - (height - ySize) / 2);
 
-		fontRendererObj.drawString(tileEntity.getInventoryName(), 26, 4, 0x404040);
-		fontRendererObj.drawString(tileEntity.mode == 0 ? MekanismUtils.localize("gui.condensentrating") : MekanismUtils.localize("gui.decondensentrating"), 6, (ySize - 94) + 2, 0x404040);
+		fontRendererObj.drawString(tileEntity.getInventoryName(), (xSize/2)-(fontRendererObj.getStringWidth(tileEntity.getInventoryName())/2), 4, 0x404040);
+		fontRendererObj.drawString(tileEntity.mode == 0 ? LangUtils.localize("gui.condensentrating") : LangUtils.localize("gui.decondensentrating"), 6, (ySize - 94) + 2, 0x404040);
 
 		if(xAxis >= 116 && xAxis <= 168 && yAxis >= 76 && yAxis <= 80)
 		{
@@ -117,7 +126,7 @@ public class GuiRotaryCondensentrator extends GuiMekanism
 
 		if(xAxis >= 4 && xAxis <= 22 && yAxis >= 4 && yAxis <= 22)
 		{
-			drawCreativeTabHoveringText(MekanismUtils.localize("gui.rotaryCondensentrator.toggleOperation"), xAxis, yAxis);
+			drawCreativeTabHoveringText(LangUtils.localize("gui.rotaryCondensentrator.toggleOperation"), xAxis, yAxis);
 		}
 
 		super.drawGuiContainerForegroundLayer(mouseX, mouseY);

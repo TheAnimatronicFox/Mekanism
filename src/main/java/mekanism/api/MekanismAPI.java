@@ -3,6 +3,8 @@ package mekanism.api;
 import java.util.HashSet;
 import java.util.Set;
 
+import mekanism.api.util.BlockInfo;
+
 import net.minecraft.block.Block;
 import net.minecraft.item.Item;
 import net.minecraftforge.oredict.OreDictionary;
@@ -12,6 +14,9 @@ public class MekanismAPI
 {
 	//Add a BlockInfo value here if you don't want a certain block to be picked up by cardboard boxes
 	private static Set<BlockInfo> cardboardBoxIgnore = new HashSet<BlockInfo>();
+	
+	/** Mekanism debug mode */
+	public static boolean debug = false;
 
 	public static boolean isBlockCompatible(Item item, int meta)
 	{

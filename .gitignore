@@ -3,6 +3,9 @@ output
 .gradle
 .idea
 *.iml
+*.ipr
+*.iws
+out
 
 Mekanism*.jar
 MDK.zip
@@ -12,6 +15,9 @@ MDK.zip
 *.classpath
 *.project
 /.settings
+/eclipse
+gradlew
+*.txt
 
 *.mtl
 *.blend1

@@ -5,18 +5,19 @@ import java.util.ArrayList;
 import mekanism.api.Coord4D;
 import mekanism.api.IConfigurable;
 import mekanism.api.Range4D;
-import mekanism.api.StackUtils;
-import mekanism.common.IActiveState;
-import mekanism.common.ILogisticalTransporter;
+import mekanism.api.util.StackUtils;
 import mekanism.common.Mekanism;
 import mekanism.common.PacketHandler;
+import mekanism.common.base.IActiveState;
+import mekanism.common.base.ILogisticalTransporter;
+import mekanism.common.base.ITransporterTile;
+import mekanism.common.content.transporter.TransporterManager;
 import mekanism.common.item.ItemBlockBasic;
 import mekanism.common.network.PacketTileEntity.TileEntityMessage;
-import mekanism.common.transporter.TransporterManager;
 import mekanism.common.util.InventoryUtils;
+import mekanism.common.util.LangUtils;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.TransporterUtils;
-
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.IInventory;
 import net.minecraft.inventory.ISidedInventory;
@@ -25,9 +26,7 @@ import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraftforge.common.util.ForgeDirection;
 import cpw.mods.fml.common.Optional.Interface;
-
 import io.netty.buffer.ByteBuf;
-
 import powercrystals.minefactoryreloaded.api.IDeepStorageUnit;
 
 @Interface(iface = "powercrystals.minefactoryreloaded.api.IDeepStorageUnit", modid = "MineFactoryReloaded")
@@ -194,9 +193,9 @@ public class TileEntityBin extends TileEntityBasicBlock implements ISidedInvento
 				{
 					TileEntity tile = Coord4D.get(this).getFromSide(ForgeDirection.getOrientation(0)).getTileEntity(worldObj);
 
-					if(tile instanceof ILogisticalTransporter)
+					if(tile instanceof ITransporterTile)
 					{
-						ILogisticalTransporter transporter = (ILogisticalTransporter)tile;
+						ILogisticalTransporter transporter = ((ITransporterTile)tile).getTransmitter();
 
 						ItemStack rejects = TransporterUtils.insert(this, transporter, bottomStack, null, true, 0);
 
@@ -364,9 +363,15 @@ public class TileEntityBin extends TileEntityBasicBlock implements ISidedInvento
 		}
 		else if(i == 1)
 		{
-			if(isValid(itemstack))
+			if(itemstack == null)
 			{
-				add(itemstack);
+				topStack = null;
+			}
+			else {
+				if(isValid(itemstack) && itemstack.stackSize > StackUtils.getSize(topStack))
+				{
+					add(StackUtils.size(itemstack, itemstack.stackSize-StackUtils.getSize(topStack)));
+				}
 			}
 		}
 	}
@@ -418,7 +423,7 @@ public class TileEntityBin extends TileEntityBasicBlock implements ISidedInvento
 	@Override
 	public String getInventoryName()
 	{
-		return MekanismUtils.localize("tile.BasicBlock.Bin.name");
+		return LangUtils.localize("tile.BasicBlock.Bin.name");
 	}
 
 	@Override

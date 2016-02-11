@@ -8,27 +8,29 @@ import mekanism.client.render.MekanismRenderer;
 import mekanism.client.sound.SoundHandler;
 import mekanism.common.Mekanism;
 import mekanism.common.OreDictCache;
+import mekanism.common.content.transporter.TModIDFilter;
+import mekanism.common.content.transporter.TransporterFilter;
 import mekanism.common.inventory.container.ContainerFilter;
 import mekanism.common.network.PacketEditFilter.EditFilterMessage;
 import mekanism.common.network.PacketLogisticalSorterGui.LogisticalSorterGuiMessage;
 import mekanism.common.network.PacketLogisticalSorterGui.SorterGuiPacket;
 import mekanism.common.network.PacketNewFilter.NewFilterMessage;
 import mekanism.common.tile.TileEntityLogisticalSorter;
-import mekanism.common.transporter.TModIDFilter;
+import mekanism.common.util.LangUtils;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.MekanismUtils.ResourceType;
 import mekanism.common.util.TransporterUtils;
-
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiTextField;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
 
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL12;
+
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
 
 @SideOnly(Side.CLIENT)
 public class GuiTModIDFilter extends GuiMekanism
@@ -53,11 +55,11 @@ public class GuiTModIDFilter extends GuiMekanism
 
 	public List<ItemStack> iterStacks;
 
-	public String status = EnumColor.DARK_GREEN + MekanismUtils.localize("gui.allOK");
+	public String status = EnumColor.DARK_GREEN + LangUtils.localize("gui.allOK");
 
 	public GuiTModIDFilter(EntityPlayer player, TileEntityLogisticalSorter tentity, int index)
 	{
-		super(new ContainerFilter(player.inventory, tentity));
+		super(tentity, new ContainerFilter(player.inventory, tentity));
 		tileEntity = tentity;
 
 		origFilter = (TModIDFilter)tileEntity.filters.get(index);
@@ -68,7 +70,7 @@ public class GuiTModIDFilter extends GuiMekanism
 
 	public GuiTModIDFilter(EntityPlayer player, TileEntityLogisticalSorter tentity)
 	{
-		super(new ContainerFilter(player.inventory, tentity));
+		super(tentity, new ContainerFilter(player.inventory, tentity));
 		tileEntity = tentity;
 
 		isNew = true;
@@ -83,8 +85,8 @@ public class GuiTModIDFilter extends GuiMekanism
 		int guiHeight = (height - ySize) / 2;
 
 		buttonList.clear();
-		buttonList.add(new GuiButton(0, guiWidth + 27, guiHeight + 62, 60, 20, MekanismUtils.localize("gui.save")));
-		buttonList.add(new GuiButton(1, guiWidth + 89, guiHeight + 62, 60, 20, MekanismUtils.localize("gui.delete")));
+		buttonList.add(new GuiButton(0, guiWidth + 27, guiHeight + 62, 60, 20, LangUtils.localize("gui.save")));
+		buttonList.add(new GuiButton(1, guiWidth + 89, guiHeight + 62, 60, 20, LangUtils.localize("gui.delete")));
 
 		if(isNew)
 		{
@@ -92,7 +94,7 @@ public class GuiTModIDFilter extends GuiMekanism
 		}
 
 		modIDText = new GuiTextField(fontRendererObj, guiWidth + 35, guiHeight + 47, 95, 12);
-		modIDText.setMaxStringLength(12);
+		modIDText.setMaxStringLength(TransporterFilter.MAX_LENGTH);
 		modIDText.setFocused(true);
 	}
 
@@ -110,7 +112,7 @@ public class GuiTModIDFilter extends GuiMekanism
 			return;
 		}
 
-		if(Character.isLetter(c) || Character.isDigit(c) || c == '*' || i == Keyboard.KEY_BACK || i == Keyboard.KEY_DELETE || i == Keyboard.KEY_LEFT || i == Keyboard.KEY_RIGHT)
+		if(Character.isLetter(c) || Character.isDigit(c) || TransporterFilter.SPECIAL_CHARS.contains(c) || i == Keyboard.KEY_BACK || i == Keyboard.KEY_DELETE || i == Keyboard.KEY_LEFT || i == Keyboard.KEY_RIGHT)
 		{
 			modIDText.textboxKeyTyped(c, i);
 		}
@@ -141,7 +143,7 @@ public class GuiTModIDFilter extends GuiMekanism
 				Mekanism.packetHandler.sendToServer(new LogisticalSorterGuiMessage(SorterGuiPacket.SERVER, Coord4D.get(tileEntity), 0, 0, 0));
 			}
 			else {
-				status = EnumColor.DARK_RED + MekanismUtils.localize("gui.modIDFilter.noKey");
+				status = EnumColor.DARK_RED + LangUtils.localize("gui.modIDFilter.noKey");
 				ticker = 20;
 			}
 		}
@@ -158,9 +160,9 @@ public class GuiTModIDFilter extends GuiMekanism
 		int xAxis = (mouseX - (width - xSize) / 2);
 		int yAxis = (mouseY - (height - ySize) / 2);
 
-		fontRendererObj.drawString((isNew ? MekanismUtils.localize("gui.new") : MekanismUtils.localize("gui.edit")) + " " + MekanismUtils.localize("gui.modIDFilter"), 43, 6, 0x404040);
-		fontRendererObj.drawString(MekanismUtils.localize("gui.status") + ": " + status, 35, 20, 0x00CD00);
-		fontRendererObj.drawString(MekanismUtils.localize("gui.id") + ": " + filter.modID, 35, 32, 0x00CD00);
+		fontRendererObj.drawString((isNew ? LangUtils.localize("gui.new") : LangUtils.localize("gui.edit")) + " " + LangUtils.localize("gui.modIDFilter"), 43, 6, 0x404040);
+		fontRendererObj.drawString(LangUtils.localize("gui.status") + ": " + status, 35, 20, 0x00CD00);
+		renderScaledText(LangUtils.localize("gui.id") + ": " + filter.modID, 35, 32, 0x00CD00, 107);
 
 		if(renderStack != null)
 		{
@@ -194,7 +196,7 @@ public class GuiTModIDFilter extends GuiMekanism
 				drawCreativeTabHoveringText(filter.color.getName(), xAxis, yAxis);
 			}
 			else {
-				drawCreativeTabHoveringText(MekanismUtils.localize("gui.none"), xAxis, yAxis);
+				drawCreativeTabHoveringText(LangUtils.localize("gui.none"), xAxis, yAxis);
 			}
 		}
 
@@ -246,7 +248,7 @@ public class GuiTModIDFilter extends GuiMekanism
 			ticker--;
 		}
 		else {
-			status = EnumColor.DARK_GREEN + MekanismUtils.localize("gui.allOK");
+			status = EnumColor.DARK_GREEN + LangUtils.localize("gui.allOK");
 		}
 
 		if(stackSwitch > 0)
@@ -338,12 +340,12 @@ public class GuiTModIDFilter extends GuiMekanism
 
 		if(modName == null || modName.isEmpty())
 		{
-			status = EnumColor.DARK_RED + MekanismUtils.localize("gui.modIDFilter.noID");
+			status = EnumColor.DARK_RED + LangUtils.localize("gui.modIDFilter.noID");
 			return;
 		}
 		else if(modName.equals(filter.modID))
 		{
-			status = EnumColor.DARK_RED + MekanismUtils.localize("gui.modIDFilter.sameID");
+			status = EnumColor.DARK_RED + LangUtils.localize("gui.modIDFilter.sameID");
 			return;
 		}
 

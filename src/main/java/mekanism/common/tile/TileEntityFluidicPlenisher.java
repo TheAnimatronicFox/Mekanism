@@ -1,21 +1,14 @@
 package mekanism.common.tile;
 
-import java.util.ArrayList;
-import java.util.EnumSet;
-import java.util.HashSet;
-import java.util.Set;
-
+import io.netty.buffer.ByteBuf;
 import mekanism.api.Coord4D;
 import mekanism.api.EnumColor;
 import mekanism.api.IConfigurable;
-import mekanism.common.ISustainedTank;
-import mekanism.common.Mekanism;
+import mekanism.api.MekanismConfig.usage;
+import mekanism.common.base.ISustainedTank;
 import mekanism.common.block.BlockMachine.MachineType;
-import mekanism.common.util.ChargeUtils;
-import mekanism.common.util.FluidContainerUtils;
-import mekanism.common.util.MekanismUtils;
-import mekanism.common.util.PipeUtils;
-
+import mekanism.common.integration.IComputerIntegration;
+import mekanism.common.util.*;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
@@ -23,17 +16,14 @@ import net.minecraft.nbt.NBTTagList;
 import net.minecraft.util.ChatComponentText;
 import net.minecraftforge.common.util.Constants.NBT;
 import net.minecraftforge.common.util.ForgeDirection;
-import net.minecraftforge.fluids.Fluid;
-import net.minecraftforge.fluids.FluidContainerRegistry;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fluids.FluidTank;
-import net.minecraftforge.fluids.FluidTankInfo;
-import net.minecraftforge.fluids.IFluidContainerItem;
-import net.minecraftforge.fluids.IFluidHandler;
+import net.minecraftforge.fluids.*;
 
-import io.netty.buffer.ByteBuf;
+import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.Set;
 
-public class TileEntityFluidicPlenisher extends TileEntityElectricBlock implements IConfigurable, IFluidHandler, ISustainedTank
+public class TileEntityFluidicPlenisher extends TileEntityElectricBlock implements IComputerIntegration, IConfigurable, IFluidHandler, ISustainedTank
 {
 	public Set<Coord4D> activeNodes = new HashSet<Coord4D>();
 	public Set<Coord4D> usedNodes = new HashSet<Coord4D>();
@@ -130,7 +120,7 @@ public class TileEntityFluidicPlenisher extends TileEntityElectricBlock implemen
 				}
 			}
 			
-			if(getEnergy() >= Mekanism.fluidicPlenisherUsage && worldObj.getWorldTime() % 10 == 0 && fluidTank.getFluidAmount() >= FluidContainerRegistry.BUCKET_VOLUME)
+			if(getEnergy() >= usage.fluidicPlenisherUsage && worldObj.getWorldTime() % 10 == 0 && fluidTank.getFluidAmount() >= FluidContainerRegistry.BUCKET_VOLUME)
 			{
 				if(fluidTank.getFluid().getFluid().canBePlacedInWorld())
 				{
@@ -141,13 +131,13 @@ public class TileEntityFluidicPlenisher extends TileEntityElectricBlock implemen
 					else {
 						Coord4D below = Coord4D.get(this).getFromSide(ForgeDirection.DOWN);
 						
-						if(canReplace(below, false, false) && getEnergy() >= Mekanism.fluidicPlenisherUsage && fluidTank.getFluidAmount() >= FluidContainerRegistry.BUCKET_VOLUME)
+						if(canReplace(below, false, false) && getEnergy() >= usage.fluidicPlenisherUsage && fluidTank.getFluidAmount() >= FluidContainerRegistry.BUCKET_VOLUME)
 						{
 							if(fluidTank.getFluid().getFluid().canBePlacedInWorld())
 							{
 								worldObj.setBlock(below.xCoord, below.yCoord, below.zCoord, MekanismUtils.getFlowingBlock(fluidTank.getFluid().getFluid()), 0, 3);
 								
-								setEnergy(getEnergy() - Mekanism.fluidicPlenisherUsage);
+								setEnergy(getEnergy() - usage.fluidicPlenisherUsage);
 								fluidTank.drain(FluidContainerRegistry.BUCKET_VOLUME, true);
 							}
 						}
@@ -195,7 +185,7 @@ public class TileEntityFluidicPlenisher extends TileEntityElectricBlock implemen
 				{
 					worldObj.setBlock(coord.xCoord, coord.yCoord, coord.zCoord, MekanismUtils.getFlowingBlock(fluidTank.getFluid().getFluid()), 0, 3);
 
-					setEnergy(getEnergy() - Mekanism.fluidicPlenisherUsage);
+					setEnergy(getEnergy() - usage.fluidicPlenisherUsage);
 					fluidTank.drain(FluidContainerRegistry.BUCKET_VOLUME, true);
 
 				}
@@ -237,12 +227,12 @@ public class TileEntityFluidicPlenisher extends TileEntityElectricBlock implemen
 			return false;
 		}
 		
-		if(coord.isAirBlock(worldObj) || MekanismUtils.isDeadFluid(worldObj, coord.xCoord, coord.yCoord, coord.zCoord))
+		if(coord.isAirBlock(worldObj) || MekanismUtils.isDeadFluid(worldObj, coord))
 		{
 			return true;
 		}
 		
-		if(MekanismUtils.isFluid(worldObj, coord.xCoord, coord.yCoord, coord.zCoord))
+		if(MekanismUtils.isFluid(worldObj, coord))
 		{
 			return isPathfinding;
 		}
@@ -278,7 +268,7 @@ public class TileEntityFluidicPlenisher extends TileEntityElectricBlock implemen
 		if(fluidTank.getFluid() != null)
 		{
 			data.add(1);
-			data.add(fluidTank.getFluid().fluidID);
+			data.add(fluidTank.getFluid().getFluidID());
 			data.add(fluidTank.getFluid().amount);
 		}
 		else {
@@ -395,7 +385,7 @@ public class TileEntityFluidicPlenisher extends TileEntityElectricBlock implemen
 	}
 
 	@Override
-	protected EnumSet<ForgeDirection> getConsumingSides()
+	public EnumSet<ForgeDirection> getConsumingSides()
 	{
 		return EnumSet.of(ForgeDirection.getOrientation(facing).getOpposite());
 	}
@@ -498,7 +488,7 @@ public class TileEntityFluidicPlenisher extends TileEntityElectricBlock implemen
 		usedNodes.clear();
 		finishedCalc = false;
 		
-		player.addChatMessage(new ChatComponentText(EnumColor.DARK_BLUE + "[Mekanism] " + EnumColor.GREY + MekanismUtils.localize("tooltip.configurator.plenisherReset")));
+		player.addChatMessage(new ChatComponentText(EnumColor.DARK_BLUE + "[Mekanism] " + EnumColor.GREY + LangUtils.localize("tooltip.configurator.plenisherReset")));
 
 		return true;
 	}
@@ -508,4 +498,28 @@ public class TileEntityFluidicPlenisher extends TileEntityElectricBlock implemen
 	{
 		return false;
 	}
+
+	private static final String[] methods = new String[] {"reset"};
+
+	@Override
+	public String[] getMethods()
+	{
+		return methods;
+	}
+
+	@Override
+	public Object[] invoke(int method, Object[] arguments) throws Exception
+    {
+        switch(method)
+        {
+            case 0:
+                activeNodes.clear();
+                usedNodes.clear();
+                finishedCalc = false;
+
+                return new Object[]{"Plenisher calculation reset."};
+            default:
+                throw new NoSuchMethodException();
+        }
+    }
 }

@@ -1,9 +1,9 @@
 package mekanism.common.tile;
 
-import mekanism.common.ISustainedInventory;
+import mekanism.common.Upgrade;
+import mekanism.common.base.ISustainedInventory;
 import mekanism.common.util.InventoryUtils;
-import mekanism.common.util.MekanismUtils;
-
+import mekanism.common.util.LangUtils;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.ISidedInventory;
 import net.minecraft.item.ItemStack;
@@ -40,7 +40,7 @@ public abstract class TileEntityContainerBlock extends TileEntityBasicBlock impl
 
 			for(int tagCount = 0; tagCount < tagList.tagCount(); tagCount++)
 			{
-				NBTTagCompound tagCompound = (NBTTagCompound)tagList.getCompoundTagAt(tagCount);
+				NBTTagCompound tagCompound = tagList.getCompoundTagAt(tagCount);
 				byte slotID = tagCompound.getByte("Slot");
 
 				if(slotID >= 0 && slotID < getSizeInventory())
@@ -78,13 +78,13 @@ public abstract class TileEntityContainerBlock extends TileEntityBasicBlock impl
 	@Override
 	public int getSizeInventory()
 	{
-		return inventory.length;
+		return inventory != null ? inventory.length : 0;
 	}
 
 	@Override
 	public ItemStack getStackInSlot(int slotID)
 	{
-		return inventory[slotID];
+		return inventory != null ? inventory[slotID] : null;
 	}
 
 	@Override
@@ -150,7 +150,7 @@ public abstract class TileEntityContainerBlock extends TileEntityBasicBlock impl
 	@Override
 	public String getInventoryName()
 	{
-		return MekanismUtils.localize(getBlockType().getUnlocalizedName() + "." + fullName + ".name");
+		return LangUtils.localize(getBlockType().getUnlocalizedName() + "." + fullName + ".name");
 	}
 
 	@Override
@@ -243,4 +243,6 @@ public abstract class TileEntityContainerBlock extends TileEntityBasicBlock impl
 	{
 		return true;
 	}
+
+	public void recalculateUpgradables(Upgrade upgradeType) {}
 }

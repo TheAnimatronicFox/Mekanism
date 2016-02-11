@@ -1,19 +1,22 @@
 package mekanism.api;
 
-import java.util.ArrayList;
-
+import cpw.mods.fml.common.network.NetworkRegistry.TargetPoint;
+import io.netty.buffer.ByteBuf;
 import net.minecraft.block.Block;
+import net.minecraft.entity.Entity;
+import net.minecraft.init.Blocks;
+import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.MathHelper;
+import net.minecraft.util.MovingObjectPosition;
 import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraftforge.common.util.ForgeDirection;
-import cpw.mods.fml.common.network.NetworkRegistry.TargetPoint;
 
-import io.netty.buffer.ByteBuf;
+import java.util.ArrayList;
 
 /**
  * Coord4D - an integer-based way to keep track of and perform operations on blocks in a Minecraft-based environment. This also takes
@@ -43,6 +46,19 @@ public class Coord4D
 
 		dimensionId = 0;
 	}
+	
+	/**
+	 * Creates a Coord4D from an entity's position, rounded down.
+	 * @param entity - entity to create the Coord4D from
+	 */
+	public Coord4D(Entity entity)
+	{
+		xCoord = (int)entity.posX;
+		yCoord = (int)entity.posY;
+		zCoord = (int)entity.posZ;
+		
+		dimensionId = entity.worldObj.provider.dimensionId;
+	}
 
 	/**
 	 * Creates a Coord4D from the defined x, y, z, and dimension values.
@@ -58,6 +74,13 @@ public class Coord4D
 		zCoord = z;
 
 		dimensionId = dimension;
+	}
+
+	public Coord4D(MovingObjectPosition mop)
+	{
+		xCoord = mop.blockX;
+		yCoord = mop.blockY;
+		zCoord = mop.blockZ;
 	}
 
 	/**
@@ -154,6 +177,18 @@ public class Coord4D
 
 		return this;
 	}
+	
+	/**
+	 * Translates this Coord4D by the defined Coord4D's coordinates, regardless of dimension.
+	 * @param coord - coordinates to translate by
+	 * @return translated Coord4D
+	 */
+	public Coord4D translate(Coord4D coord)
+	{
+		translate(coord.xCoord, coord.yCoord, coord.zCoord);
+		
+		return this;
+	}
 
 	/**
 	 * Creates and returns a new Coord4D translated to the defined offsets of the side.
@@ -165,9 +200,27 @@ public class Coord4D
 		return getFromSide(side, 1);
 	}
 
+	/**
+	 * Creates and returns a new Coord4D translated to the defined offsets of the side by the defined amount.
+	 * @param side - side to translate this Coord4D to
+	 * @param amount - how far to translate this Coord4D
+	 * @return translated Coord4D
+	 */
 	public Coord4D getFromSide(ForgeDirection side, int amount)
 	{
 		return new Coord4D(xCoord+(side.offsetX*amount), yCoord+(side.offsetY*amount), zCoord+(side.offsetZ*amount), dimensionId);
+	}
+	
+	public ItemStack getStack(IBlockAccess world)
+	{
+		Block block = getBlock(world);
+		
+		if(block == null || block == Blocks.air)
+		{
+			return null;
+		}
+		
+		return new ItemStack(block, 1, getMetadata(world));
 	}
 
 	/**
@@ -182,7 +235,7 @@ public class Coord4D
 
 	/**
 	 * Returns a new Coord4D from a tag compound.
-	 * @param data - tag compound to read from
+	 * @param tag - tag compound to read from
 	 * @return the Coord4D from the tag compound
 	 */
     public static Coord4D read(NBTTagCompound tag)
@@ -282,7 +335,7 @@ public class Coord4D
 	 */
 	public boolean exists(World world)
 	{
-		return world.getChunkProvider().chunkExists(xCoord >> 4, zCoord >> 4);
+		return world.getChunkProvider() == null || world.getChunkProvider().chunkExists(xCoord >> 4, zCoord >> 4);
 	}
 
 	/**
@@ -312,6 +365,16 @@ public class Coord4D
 	public boolean isAirBlock(IBlockAccess world)
 	{
 		return world.isAirBlock(xCoord, yCoord, zCoord);
+	}
+	
+	/**
+	 * Whether or not this block this Coord4D represents is replaceable.
+	 * @param world - world this Coord4D is in
+	 * @return if this Coord4D is replaceable
+	 */
+	public boolean isReplaceable(IBlockAccess world)
+	{
+		return getBlock(world).isReplaceable(world, xCoord, yCoord, zCoord);
 	}
 	
 	/**

@@ -1,9 +1,14 @@
 package mekanism.generators.common;
 
+import mekanism.api.MekanismConfig.generators;
 import mekanism.common.Mekanism;
+import mekanism.common.inventory.container.ContainerNull;
+import mekanism.common.tile.TileEntityContainerBlock;
 import mekanism.generators.common.inventory.container.ContainerBioGenerator;
 import mekanism.generators.common.inventory.container.ContainerGasGenerator;
 import mekanism.generators.common.inventory.container.ContainerHeatGenerator;
+import mekanism.generators.common.inventory.container.ContainerNeutronCapture;
+import mekanism.generators.common.inventory.container.ContainerReactorController;
 import mekanism.generators.common.inventory.container.ContainerSolarGenerator;
 import mekanism.generators.common.inventory.container.ContainerWindTurbine;
 import mekanism.generators.common.tile.TileEntityAdvancedSolarGenerator;
@@ -12,11 +17,18 @@ import mekanism.generators.common.tile.TileEntityGasGenerator;
 import mekanism.generators.common.tile.TileEntityHeatGenerator;
 import mekanism.generators.common.tile.TileEntitySolarGenerator;
 import mekanism.generators.common.tile.TileEntityWindTurbine;
-
+import mekanism.generators.common.tile.reactor.TileEntityReactorController;
+import mekanism.generators.common.tile.reactor.TileEntityReactorFrame;
+import mekanism.generators.common.tile.reactor.TileEntityReactorGlass;
+import mekanism.generators.common.tile.reactor.TileEntityReactorLaserFocusMatrix;
+import mekanism.generators.common.tile.reactor.TileEntityReactorLogicAdapter;
+import mekanism.generators.common.tile.reactor.TileEntityReactorNeutronCapture;
+import mekanism.generators.common.tile.reactor.TileEntityReactorPort;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.Container;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.world.World;
+import cpw.mods.fml.client.registry.RenderingRegistry;
 import cpw.mods.fml.common.registry.GameRegistry;
 
 /**
@@ -26,6 +38,21 @@ import cpw.mods.fml.common.registry.GameRegistry;
  */
 public class GeneratorsCommonProxy
 {
+	public static int GENERATOR_RENDER_ID = RenderingRegistry.getNextAvailableRenderId();
+
+	/**
+	 * Register normal tile entities
+	 */
+	public void registerRegularTileEntities()
+	{
+		GameRegistry.registerTileEntity(TileEntityReactorFrame.class, "ReactorFrame");
+		GameRegistry.registerTileEntity(TileEntityReactorGlass.class, "ReactorGlass");
+		GameRegistry.registerTileEntity(TileEntityReactorLaserFocusMatrix.class, "ReactorLaserFocus");
+		GameRegistry.registerTileEntity(TileEntityReactorNeutronCapture.class, "ReactorNeutronCapture");
+		GameRegistry.registerTileEntity(TileEntityReactorPort.class, "ReactorPort");
+		GameRegistry.registerTileEntity(TileEntityReactorLogicAdapter.class, "ReactorLogicAdapter");
+	}
+
 	/**
 	 * Register tile entities that have special models. Overwritten in client to register TESRs.
 	 */
@@ -37,6 +64,7 @@ public class GeneratorsCommonProxy
 		GameRegistry.registerTileEntity(TileEntityHeatGenerator.class, "HeatGenerator");
 		GameRegistry.registerTileEntity(TileEntityGasGenerator.class, "GasGenerator");
 		GameRegistry.registerTileEntity(TileEntityWindTurbine.class, "WindTurbine");
+		GameRegistry.registerTileEntity(TileEntityReactorController.class, "ReactorController");
 	}
 
 	/**
@@ -49,15 +77,13 @@ public class GeneratorsCommonProxy
 	 */
 	public void loadConfiguration()
 	{
-		MekanismGenerators.enableAmbientLighting = Mekanism.configuration.get("general", "EnableAmbientLighting", true).getBoolean(true);
-		MekanismGenerators.ambientLightingLevel = Mekanism.configuration.get("general", "AmbientLightingLevel", 15, "", 0, 15).getInt(15);
-
-		MekanismGenerators.advancedSolarGeneration = Mekanism.configuration.get("generation", "AdvancedSolarGeneration", 300D).getDouble(300D);
-		MekanismGenerators.bioGeneration = Mekanism.configuration.get("generation", "BioGeneration", 350D).getDouble(350D);
-		MekanismGenerators.heatGeneration = Mekanism.configuration.get("generation", "HeatGeneration", 150D).getDouble(150D);
-		MekanismGenerators.heatGenerationLava = Mekanism.configuration.get("generation", "HeatGenerationLava", 5D).getDouble(5D);
-		MekanismGenerators.heatGenerationNether = Mekanism.configuration.get("generation", "HeatGenerationNether", 100D).getDouble(100D);
-		MekanismGenerators.solarGeneration = Mekanism.configuration.get("generation", "SolarGeneration", 50D).getDouble(50D);
+		generators.advancedSolarGeneration = Mekanism.configuration.get("generation", "AdvancedSolarGeneration", 300D).getDouble(300D);
+		generators.bioGeneration = Mekanism.configuration.get("generation", "BioGeneration", 350D).getDouble(350D);
+		generators.heatGeneration = Mekanism.configuration.get("generation", "HeatGeneration", 150D).getDouble(150D);
+		generators.heatGenerationLava = Mekanism.configuration.get("generation", "HeatGenerationLava", 5D).getDouble(5D);
+		generators.heatGenerationNether = Mekanism.configuration.get("generation", "HeatGenerationNether", 100D).getDouble(100D);
+		generators.solarGeneration = Mekanism.configuration.get("generation", "SolarGeneration", 50D).getDouble(50D);
+		
 		loadWindConfiguration();
 
 		if(Mekanism.configuration.hasChanged())
@@ -65,7 +91,7 @@ public class GeneratorsCommonProxy
 			Mekanism.configuration.save();
 		}
 	}
-
+	
 	private void loadWindConfiguration() 
 	{
 		if(Mekanism.configuration.hasKey("generation", "WindGeneration")) 
@@ -75,20 +101,20 @@ public class GeneratorsCommonProxy
 			final double windGenerationMax = legacyWindGeneration * 8D;
 			Mekanism.configuration.getCategory("generation").remove("WindGeneration");
 
-			MekanismGenerators.windGenerationMin = Mekanism.configuration.get("generation", "WindGenerationMin", legacyWindGeneration).getDouble(legacyWindGeneration);
-			MekanismGenerators.windGenerationMax = Mekanism.configuration.get("generation", "WindGenerationMax", windGenerationMax).getDouble(windGenerationMax);
+			generators.windGenerationMin = Mekanism.configuration.get("generation", "WindGenerationMin", legacyWindGeneration).getDouble(legacyWindGeneration);
+			generators.windGenerationMax = Mekanism.configuration.get("generation", "WindGenerationMax", windGenerationMax).getDouble(windGenerationMax);
 		} 
 		else {
-			MekanismGenerators.windGenerationMin = Mekanism.configuration.get("generation", "WindGenerationMin", 60D).getDouble(60D);
-			MekanismGenerators.windGenerationMax = Mekanism.configuration.get("generation", "WindGenerationMax", 480D).getDouble(480D);
+			generators.windGenerationMin = Mekanism.configuration.get("generation", "WindGenerationMin", 60D).getDouble(60D);
+			generators.windGenerationMax = Mekanism.configuration.get("generation", "WindGenerationMax", 480D).getDouble(480D);
 		}
 
 		//Ensure max > min to avoid division by zero later
 		final int minY = Mekanism.configuration.get("generation", "WindGenerationMinY", 24).getInt(24);
 		final int maxY = Mekanism.configuration.get("generation", "WindGenerationMaxY", 255).getInt(255);
-		
-		MekanismGenerators.windGenerationMinY = minY;
-		MekanismGenerators.windGenerationMaxY = Math.max(minY + 1, maxY);
+
+		generators.windGenerationMinY = minY;
+		generators.windGenerationMaxY = Math.max(minY + 1, maxY);
 	}
 
 	/**
@@ -132,6 +158,16 @@ public class GeneratorsCommonProxy
 				return new ContainerBioGenerator(player.inventory, (TileEntityBioGenerator)tileEntity);
 			case 5:
 				return new ContainerWindTurbine(player.inventory, (TileEntityWindTurbine)tileEntity);
+			case 10:
+				return new ContainerReactorController(player.inventory, (TileEntityReactorController)tileEntity);
+			case 11:
+			case 12:
+			case 13:
+				return new ContainerNull(player, (TileEntityContainerBlock)tileEntity);
+			case 14:
+				return new ContainerNeutronCapture(player.inventory, (TileEntityReactorNeutronCapture)tileEntity);
+			case 15:
+				return new ContainerNull(player, (TileEntityContainerBlock)tileEntity);
 		}
 		
 		return null;

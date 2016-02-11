@@ -1,27 +1,23 @@
 package mekanism.generators.common.tile;
 
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
 import mekanism.api.Coord4D;
-import mekanism.common.IBoundingBlock;
-import mekanism.common.Mekanism;
+import mekanism.api.MekanismConfig.generators;
+import mekanism.common.base.IBoundingBlock;
 import mekanism.common.util.ChargeUtils;
 import mekanism.common.util.MekanismUtils;
-import mekanism.generators.common.MekanismGenerators;
-
 import net.minecraft.item.ItemStack;
-import cpw.mods.fml.common.Optional.Method;
-
-import dan200.computercraft.api.lua.ILuaContext;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.peripheral.IComputerAccess;
+import net.minecraftforge.common.util.ForgeDirection;
 
 public class TileEntityWindTurbine extends TileEntityGenerator implements IBoundingBlock
 {
 	/** The angle the blades of this Wind Turbine are currently at. */
-	public int angle;
+	public double angle;
 
 	public TileEntityWindTurbine()
 	{
-		super("WindTurbine", 200000, (MekanismGenerators.windGenerationMax)*2);
+		super("wind", "WindTurbine", 200000, (generators.windGenerationMax)*2);
 		inventory = new ItemStack[1];
 	}
 
@@ -37,7 +33,7 @@ public class TileEntityWindTurbine extends TileEntityGenerator implements IBound
 			if(canOperate())
 			{
 				setActive(true);
-				setEnergy(electricityStored + (MekanismGenerators.windGenerationMin*getMultiplier()));
+				setEnergy(electricityStored + (generators.windGenerationMin*getMultiplier()));
 			}
 			else {
 				setActive(false);
@@ -50,10 +46,10 @@ public class TileEntityWindTurbine extends TileEntityGenerator implements IBound
 	{
 		if(worldObj.canBlockSeeTheSky(xCoord, yCoord+4, zCoord)) 
 		{
-			final float minY = (float)MekanismGenerators.windGenerationMinY;
-			final float maxY = (float)MekanismGenerators.windGenerationMaxY;
-			final float minG = (float)MekanismGenerators.windGenerationMin;
-			final float maxG = (float)MekanismGenerators.windGenerationMax;
+			final float minY = (float)generators.windGenerationMinY;
+			final float maxY = (float)generators.windGenerationMaxY;
+			final float minG = (float)generators.windGenerationMin;
+			final float maxG = (float)generators.windGenerationMax;
 
 			final float slope = (maxG - minG) / (maxY - minY);
 			final float intercept = minG - slope * minY;
@@ -69,21 +65,22 @@ public class TileEntityWindTurbine extends TileEntityGenerator implements IBound
 	}
 
 	@Override
-	public float getVolumeMultiplier()
+	@SideOnly(Side.CLIENT)
+	public float getVolume()
 	{
 		return 1.5F;
 	}
 
+    private static final String[] methods = new String[] {"getStored", "getOutput", "getMaxEnergy", "getEnergyNeeded", "getMultiplier"};
+
 	@Override
-	@Method(modid = "ComputerCraft")
-	public String[] getMethodNames()
+	public String[] getMethods()
 	{
-		return new String[] {"getStored", "getOutput", "getMaxEnergy", "getEnergyNeeded", "getMultiplier"};
+		return methods;
 	}
 
 	@Override
-	@Method(modid = "ComputerCraft")
-	public Object[] callMethod(IComputerAccess computer, ILuaContext context, int method, Object[] arguments) throws LuaException, InterruptedException
+	public Object[] invoke(int method, Object[] arguments) throws Exception
 	{
 		switch(method)
 		{
@@ -92,30 +89,30 @@ public class TileEntityWindTurbine extends TileEntityGenerator implements IBound
 			case 1:
 				return new Object[] {output};
 			case 2:
-				return new Object[] {MAX_ELECTRICITY};
+				return new Object[] {BASE_MAX_ENERGY};
 			case 3:
-				return new Object[] {(MAX_ELECTRICITY-electricityStored)};
+				return new Object[] {(BASE_MAX_ENERGY -electricityStored)};
 			case 4:
 				return new Object[] {getMultiplier()};
 			default:
-				Mekanism.logger.error("Attempted to call unknown method with computer ID " + computer.getID());
-				return null;
+				throw new NoSuchMethodException();
 		}
 	}
 
 	@Override
 	public boolean canOperate()
 	{
-		return electricityStored < MAX_ELECTRICITY && getMultiplier() > 0 && MekanismUtils.canFunction(this);
+		return electricityStored < BASE_MAX_ENERGY && getMultiplier() > 0 && MekanismUtils.canFunction(this);
 	}
 
 	@Override
 	public void onPlace()
 	{
-		MekanismUtils.makeBoundingBlock(worldObj, xCoord, yCoord+1, zCoord, Coord4D.get(this));
-		MekanismUtils.makeBoundingBlock(worldObj, xCoord, yCoord+2, zCoord, Coord4D.get(this));
-		MekanismUtils.makeBoundingBlock(worldObj, xCoord, yCoord+3, zCoord, Coord4D.get(this));
-		MekanismUtils.makeBoundingBlock(worldObj, xCoord, yCoord+4, zCoord, Coord4D.get(this));
+		Coord4D pos = Coord4D.get(this);
+		MekanismUtils.makeBoundingBlock(worldObj, pos.getFromSide(ForgeDirection.UP, 1), pos);
+		MekanismUtils.makeBoundingBlock(worldObj, pos.getFromSide(ForgeDirection.UP, 2), pos);
+		MekanismUtils.makeBoundingBlock(worldObj, pos.getFromSide(ForgeDirection.UP, 3), pos);
+		MekanismUtils.makeBoundingBlock(worldObj, pos.getFromSide(ForgeDirection.UP, 4), pos);
 	}
 
 	@Override

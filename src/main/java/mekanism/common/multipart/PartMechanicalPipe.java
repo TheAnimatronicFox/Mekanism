@@ -1,47 +1,40 @@
 package mekanism.common.multipart;
 
-import java.util.Set;
-
-import mekanism.api.transmitters.IGridTransmitter;
+import codechicken.lib.vec.Vector3;
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
 import mekanism.api.transmitters.TransmissionType;
 import mekanism.client.render.RenderPartTransmitter;
 import mekanism.common.FluidNetwork;
 import mekanism.common.Tier;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.PipeUtils;
-
 import net.minecraft.client.renderer.texture.IIconRegister;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.IIcon;
 import net.minecraftforge.common.util.ForgeDirection;
-import net.minecraftforge.fluids.Fluid;
-import net.minecraftforge.fluids.FluidContainerRegistry;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fluids.FluidTank;
-import net.minecraftforge.fluids.FluidTankInfo;
-import net.minecraftforge.fluids.IFluidHandler;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
+import net.minecraftforge.fluids.*;
 
-import codechicken.lib.vec.Vector3;
+import java.util.Collection;
 
-public class PartMechanicalPipe extends PartTransmitter<FluidNetwork> implements IFluidHandler
+public class PartMechanicalPipe extends PartTransmitter<IFluidHandler, FluidNetwork> implements IFluidHandler
 {
-	public Tier.PipeTier tier;
-	/** The fake tank used for fluid transfer calculations. */
-	public FluidTank dummyTank = new FluidTank(FluidContainerRegistry.BUCKET_VOLUME);
-
-	public static TransmitterIcons pipeIcons = new TransmitterIcons(4, 1);
+	public static TransmitterIcons pipeIcons = new TransmitterIcons(4, 8);
 
 	public float currentScale;
 
-	public FluidStack cacheFluid;
+	public FluidTank buffer = new FluidTank(FluidContainerRegistry.BUCKET_VOLUME);
+
 	public FluidStack lastWrite;
+
+	public Tier.PipeTier tier;
 
 	public PartMechanicalPipe(Tier.PipeTier pipeTier)
 	{
+		super();
 		tier = pipeTier;
+		buffer.setCapacity(getCapacity());
 	}
 
 	@Override
@@ -49,29 +42,8 @@ public class PartMechanicalPipe extends PartTransmitter<FluidNetwork> implements
 	{
 		if(!world().isRemote)
 		{
-			if(cacheFluid != null)
-			{
-				if(getTransmitterNetwork().fluidStored == null)
-				{
-					getTransmitterNetwork().fluidStored = cacheFluid;
-				}
-				else {
-					getTransmitterNetwork().fluidStored.amount += cacheFluid.amount;
-				}
-
-				cacheFluid = null;
-			}
-
-			if(getTransmitterNetwork(false) != null && getTransmitterNetwork(false).getSize() > 0)
-			{
-				int last = lastWrite != null ? lastWrite.amount : 0;
-
-				if(last != getSaveShare())
-				{
-					MekanismUtils.saveChunk(tile());
-				}
-			}
-
+            updateShare();
+            
 			IFluidHandler[] connectedAcceptors = PipeUtils.getConnectedAcceptors(tile());
 
 			for(ForgeDirection side : getConnections(ConnectionType.PULL))
@@ -86,7 +58,7 @@ public class PartMechanicalPipe extends PartTransmitter<FluidNetwork> implements
 
 						if(received != null && received.amount != 0)
 						{
-							container.drain(side.getOpposite(), getTransmitterNetwork().emit(received, true), true);
+							container.drain(side.getOpposite(), takeFluid(received, true), true);
 						}
 					}
 				}
@@ -96,39 +68,51 @@ public class PartMechanicalPipe extends PartTransmitter<FluidNetwork> implements
 		super.update();
 	}
 
-	private int getSaveShare()
-	{
-		if(getTransmitterNetwork().fluidStored != null)
-		{
-			int remain = getTransmitterNetwork().fluidStored.amount%getTransmitterNetwork().transmitters.size();
-			int toSave = getTransmitterNetwork().fluidStored.amount/getTransmitterNetwork().transmitters.size();
+    @Override
+    public void updateShare()
+    {
+        if(getTransmitter().hasTransmitterNetwork() && getTransmitter().getTransmitterNetworkSize() > 0)
+        {
+            FluidStack last = getSaveShare();
 
-			if(getTransmitterNetwork().isFirst((IGridTransmitter<FluidNetwork>)tile()))
+            if((last != null && !(lastWrite != null && lastWrite.amount == last.amount && lastWrite.getFluid() == last.getFluid())) || (last == null && lastWrite != null))
+            {
+                lastWrite = last;
+                MekanismUtils.saveChunk(tile());
+            }
+        }
+    }
+
+	private FluidStack getSaveShare()
+	{
+		if(getTransmitter().hasTransmitterNetwork() && getTransmitter().getTransmitterNetwork().buffer != null)
+		{
+			int remain = getTransmitter().getTransmitterNetwork().buffer.amount%getTransmitter().getTransmitterNetwork().transmitters.size();
+			int toSave = getTransmitter().getTransmitterNetwork().buffer.amount/getTransmitter().getTransmitterNetwork().transmitters.size();
+
+			if(getTransmitter().getTransmitterNetwork().transmitters.iterator().next().equals(getTransmitter()))
 			{
 				toSave += remain;
 			}
 
-			return toSave;
+			return new FluidStack(getTransmitter().getTransmitterNetwork().buffer.getFluid(), toSave);
 		}
 
-		return 0;
+		return null;
 	}
 
 	@Override
 	public void onChunkUnload()
 	{
-		if(!world().isRemote)
+		if(!world().isRemote && getTransmitter().hasTransmitterNetwork())
 		{
-			if(lastWrite != null)
+			if(lastWrite != null && getTransmitter().getTransmitterNetwork().buffer != null)
 			{
-				if(getTransmitterNetwork().fluidStored != null)
-				{
-					getTransmitterNetwork().fluidStored.amount -= lastWrite.amount;
+				getTransmitter().getTransmitterNetwork().buffer.amount -= lastWrite.amount;
 
-					if(getTransmitterNetwork().fluidStored.amount <= 0)
-					{
-						getTransmitterNetwork().fluidStored = null;
-					}
+				if(getTransmitter().getTransmitterNetwork().buffer.amount <= 0)
+				{
+					getTransmitter().getTransmitterNetwork().buffer = null;
 				}
 			}
 		}
@@ -137,33 +121,20 @@ public class PartMechanicalPipe extends PartTransmitter<FluidNetwork> implements
 	}
 
 	@Override
-	public void preSingleMerge(FluidNetwork network)
-	{
-		if(cacheFluid != null)
-		{
-			if(network.fluidStored == null)
-			{
-				network.fluidStored = cacheFluid;
-			}
-			else {
-				network.fluidStored.amount += cacheFluid.amount;
-			}
-
-			cacheFluid = null;
-		}
-	}
-
-	@Override
 	public void load(NBTTagCompound nbtTags)
 	{
 		super.load(nbtTags);
+		
+		tier = Tier.PipeTier.values()[nbtTags.getInteger("tier")];
+		buffer.setCapacity(getCapacity());
 
 		if(nbtTags.hasKey("cacheFluid"))
 		{
-			cacheFluid = FluidStack.loadFluidStackFromNBT(nbtTags.getCompoundTag("cacheFluid"));
+			buffer.setFluid(FluidStack.loadFluidStackFromNBT(nbtTags.getCompoundTag("cacheFluid")));
 		}
-
-		tier = Tier.PipeTier.values()[nbtTags.getInteger("tier")];
+        else {
+            buffer.setFluid(null);
+        }
 	}
 
 	@Override
@@ -171,23 +142,13 @@ public class PartMechanicalPipe extends PartTransmitter<FluidNetwork> implements
 	{
 		super.save(nbtTags);
 
-		if(getTransmitterNetwork(false) != null && getTransmitterNetwork(false).getSize() > 0 && getTransmitterNetwork(false).fluidStored != null)
+		if(lastWrite != null && lastWrite.amount > 0)
 		{
-			int remain = getTransmitterNetwork().fluidStored.amount%getTransmitterNetwork().transmitters.size();
-			int toSave = getTransmitterNetwork().fluidStored.amount/getTransmitterNetwork().transmitters.size();
-
-			if(getTransmitterNetwork().isFirst((IGridTransmitter<FluidNetwork>)tile()))
-			{
-				toSave += remain;
-			}
-
-			if(toSave > 0)
-			{
-				FluidStack stack = new FluidStack(getTransmitterNetwork().fluidStored.getFluid(), toSave);
-				lastWrite = stack;
-				nbtTags.setTag("cacheFluid", stack.writeToNBT(new NBTTagCompound()));
-			}
+			nbtTags.setTag("cacheFluid", lastWrite.writeToNBT(new NBTTagCompound()));
 		}
+        else {
+            nbtTags.removeTag("cacheFluid");
+        }
 
 		nbtTags.setInteger("tier", tier.ordinal());
 	}
@@ -200,21 +161,27 @@ public class PartMechanicalPipe extends PartTransmitter<FluidNetwork> implements
 
 	public static void registerIcons(IIconRegister register)
 	{
-		pipeIcons.registerCenterIcons(register, new String[] {"MechanicalPipeBasic", "MechanicalPipeAdvanced",
-				"MechanicalPipeElite", "MechanicalPipeUltimate"});
-		pipeIcons.registerSideIcons(register, new String[] {"MechanicalPipeSide"});
+		pipeIcons.registerCenterIcons(register, new String[] {"MechanicalPipeBasic", "MechanicalPipeAdvanced", "MechanicalPipeElite", "MechanicalPipeUltimate"});
+		pipeIcons.registerSideIcons(register, new String[] {"MechanicalPipeVerticalBasic", "MechanicalPipeVerticalAdvanced", "MechanicalPipeVerticalElite", "MechanicalPipeVerticalUltimate",
+				"MechanicalPipeHorizontalBasic", "MechanicalPipeHorizontalAdvanced", "MechanicalPipeHorizontalElite", "MechanicalPipeHorizontalUltimate"});
 	}
 
 	@Override
-	public IIcon getCenterIcon()
+	public IIcon getCenterIcon(boolean opaque)
 	{
 		return pipeIcons.getCenterIcon(tier.ordinal());
 	}
 
 	@Override
-	public IIcon getSideIcon()
+	public IIcon getSideIcon(boolean opaque)
 	{
-		return pipeIcons.getSideIcon(0);
+		return pipeIcons.getSideIcon(tier.ordinal());
+	}
+
+	@Override
+	public IIcon getSideIconRotated(boolean opaque)
+	{
+		return pipeIcons.getSideIcon(4+tier.ordinal());
 	}
 
 	@Override
@@ -224,7 +191,7 @@ public class PartMechanicalPipe extends PartTransmitter<FluidNetwork> implements
 	}
 
 	@Override
-	public TransmitterType getTransmitter() 
+	public TransmitterType getTransmitterType()
 	{ 
 		return tier.type; 
 	}
@@ -236,13 +203,13 @@ public class PartMechanicalPipe extends PartTransmitter<FluidNetwork> implements
 	}
 
 	@Override
-	public FluidNetwork createNetworkFromSingleTransmitter(IGridTransmitter<FluidNetwork> transmitter)
+	public FluidNetwork createNewNetwork()
 	{
-		return new FluidNetwork(transmitter);
+		return new FluidNetwork();
 	}
 
 	@Override
-	public FluidNetwork createNetworkByMergingSet(Set<FluidNetwork> networks)
+	public FluidNetwork createNetworkByMerging(Collection<FluidNetwork> networks)
 	{
 		return new FluidNetwork(networks);
 	}
@@ -258,11 +225,33 @@ public class PartMechanicalPipe extends PartTransmitter<FluidNetwork> implements
 	}
 
 	@Override
+	public int getCapacity()
+	{
+		return tier.pipeCapacity;
+	}
+
+	@Override
+	public FluidStack getBuffer()
+	{
+		return buffer == null ? null : buffer.getFluid();
+	}
+
+	@Override
+	public void takeShare()
+	{
+		if(getTransmitter().hasTransmitterNetwork() && getTransmitter().getTransmitterNetwork().buffer != null && lastWrite != null)
+		{
+			getTransmitter().getTransmitterNetwork().buffer.amount -= lastWrite.amount;
+			buffer.setFluid(lastWrite);
+		}
+	}
+
+	@Override
 	public int fill(ForgeDirection from, FluidStack resource, boolean doFill)
 	{
 		if(getConnectionType(from) == ConnectionType.NORMAL)
 		{
-			return getTransmitterNetwork().emit(resource, doFill);
+			return takeFluid(resource, doFill);
 		}
 
 		return 0;
@@ -297,44 +286,25 @@ public class PartMechanicalPipe extends PartTransmitter<FluidNetwork> implements
 	{
 		if(getConnectionType(from) != ConnectionType.NONE)
 		{
-			return new FluidTankInfo[] {dummyTank.getInfo()};
+			return new FluidTankInfo[] {buffer.getInfo()};
 		}
 
 		return new FluidTankInfo[0];
 	}
 
-	@Override
-	public int getTransmitterNetworkSize()
-	{
-		return getTransmitterNetwork().getSize();
-	}
-
-	@Override
-	public int getTransmitterNetworkAcceptorSize()
-	{
-		return getTransmitterNetwork().getAcceptorSize();
-	}
-
-	@Override
-	public String getTransmitterNetworkNeeded()
-	{
-		return getTransmitterNetwork().getNeededInfo();
-	}
-
-	@Override
-	public String getTransmitterNetworkFlow()
-	{
-		return getTransmitterNetwork().getFlowInfo();
-	}
-
-	@Override
-	public int getCapacity()
-	{
-		return tier.pipeCapacity;
-	}
-
 	public int getPullAmount()
 	{
 		return tier.pipePullAmount;
+	}
+
+	public int takeFluid(FluidStack fluid, boolean doEmit)
+	{
+		if(getTransmitter().hasTransmitterNetwork())
+		{
+			return getTransmitter().getTransmitterNetwork().emit(fluid, doEmit);
+		}
+		else {
+			return buffer.fill(fluid, doEmit);
+		}
 	}
 }

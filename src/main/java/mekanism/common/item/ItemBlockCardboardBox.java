@@ -4,12 +4,10 @@ import java.util.List;
 
 import mekanism.api.EnumColor;
 import mekanism.api.MekanismAPI;
-import mekanism.common.Mekanism;
+import mekanism.common.MekanismBlocks;
 import mekanism.common.block.BlockCardboardBox.BlockData;
 import mekanism.common.tile.TileEntityCardboardBox;
 import mekanism.common.util.LangUtils;
-import mekanism.common.util.MekanismUtils;
-
 import net.minecraft.block.Block;
 import net.minecraft.entity.item.EntityItem;
 import net.minecraft.entity.player.EntityPlayer;
@@ -45,16 +43,16 @@ public class ItemBlockCardboardBox extends ItemBlock
 	@SideOnly(Side.CLIENT)
 	public void addInformation(ItemStack itemstack, EntityPlayer entityplayer, List list, boolean flag)
 	{
-		list.add(EnumColor.INDIGO + MekanismUtils.localize("tooltip.blockData") + ": " + LangUtils.transYesNo(getBlockData(itemstack) != null));
+		list.add(EnumColor.INDIGO + LangUtils.localize("tooltip.blockData") + ": " + LangUtils.transYesNo(getBlockData(itemstack) != null));
 
 		if(getBlockData(itemstack) != null)
 		{
-			list.add(MekanismUtils.localize("tooltip.block") + ": " + new ItemStack(getBlockData(itemstack).block, getBlockData(itemstack).meta).getDisplayName());
-			list.add(MekanismUtils.localize("tooltip.meta") + ": " + getBlockData(itemstack).meta);
+			list.add(LangUtils.localize("tooltip.block") + ": " + new ItemStack(getBlockData(itemstack).block, getBlockData(itemstack).meta).getDisplayName());
+			list.add(LangUtils.localize("tooltip.meta") + ": " + getBlockData(itemstack).meta);
 
 			if(getBlockData(itemstack).tileTag != null)
 			{
-				list.add(MekanismUtils.localize("tooltip.tile") + ": " + getBlockData(itemstack).tileTag.getString("id"));
+				list.add(LangUtils.localize("tooltip.tile") + ": " + getBlockData(itemstack).tileTag.getString("id"));
 			}
 		}
 	}
@@ -79,7 +77,7 @@ public class ItemBlockCardboardBox extends ItemBlock
 			Block block = world.getBlock(x, y, z);
 			int meta = world.getBlockMetadata(x, y, z);
 
-			if(!world.isRemote && MekanismAPI.isBlockCompatible(Item.getItemFromBlock(block), meta))
+			if(!world.isRemote && MekanismAPI.isBlockCompatible(Item.getItemFromBlock(block), meta) && block.getBlockHardness(world, x, y, z) != -1)
 			{
 				BlockData data = new BlockData();
 				data.block = block;
@@ -101,7 +99,7 @@ public class ItemBlockCardboardBox extends ItemBlock
 					stack.stackSize--;
 				}
 
-				world.setBlock(x, y, z, Mekanism.CardboardBox, 1, 3);
+				world.setBlock(x, y, z, MekanismBlocks.CardboardBox, 1, 3);
 
 				isMonitoring = false;
 

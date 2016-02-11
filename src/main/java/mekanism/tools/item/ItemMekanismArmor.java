@@ -2,12 +2,13 @@ package mekanism.tools.item;
 
 import java.util.List;
 
-import mekanism.api.StackUtils;
+import mekanism.api.util.StackUtils;
 import mekanism.client.render.ModelCustomArmor;
 import mekanism.common.Mekanism;
-import mekanism.common.util.MekanismUtils;
+import mekanism.common.MekanismItems;
+import mekanism.common.util.LangUtils;
 import mekanism.tools.common.MekanismTools;
-
+import mekanism.tools.common.ToolsItems;
 import net.minecraft.client.model.ModelBiped;
 import net.minecraft.client.renderer.texture.IIconRegister;
 import net.minecraft.entity.Entity;
@@ -30,7 +31,7 @@ public class ItemMekanismArmor extends ItemArmor
 	@Override
 	public void addInformation(ItemStack itemstack, EntityPlayer entityplayer, List list, boolean flag)
 	{
-		list.add(MekanismUtils.localize("tooltip.hp") + ": " + (itemstack.getMaxDamage() - itemstack.getItemDamage()));
+		list.add(LangUtils.localize("tooltip.hp") + ": " + (itemstack.getMaxDamage() - itemstack.getItemDamage()));
 	}
 
 	@Override
@@ -56,7 +57,7 @@ public class ItemMekanismArmor extends ItemArmor
     {
     	if(getArmorMaterial() == MekanismTools.armorOBSIDIAN)
     	{
-    		return new ItemStack(Mekanism.Ingot, 1, 0);
+    		return new ItemStack(MekanismItems.Ingot, 1, 0);
     	}
     	else if(getArmorMaterial() == MekanismTools.armorLAZULI)
     	{
@@ -64,19 +65,19 @@ public class ItemMekanismArmor extends ItemArmor
     	}
     	else if(getArmorMaterial() == MekanismTools.armorOSMIUM)
     	{
-    		return new ItemStack(Mekanism.Ingot, 1, 1);
+    		return new ItemStack(MekanismItems.Ingot, 1, 1);
     	}
     	else if(getArmorMaterial() == MekanismTools.armorBRONZE)
     	{
-    		return new ItemStack(Mekanism.Ingot, 1, 2);
+    		return new ItemStack(MekanismItems.Ingot, 1, 2);
     	}
     	else if(getArmorMaterial() == MekanismTools.armorGLOWSTONE)
     	{
-    		return new ItemStack(Mekanism.Ingot, 1, 3);
+    		return new ItemStack(MekanismItems.Ingot, 1, 3);
     	}
     	else if(getArmorMaterial() == MekanismTools.armorSTEEL)
     	{
-    		return new ItemStack(Mekanism.Ingot, 1, 4);
+    		return new ItemStack(MekanismItems.Ingot, 1, 4);
     	}
     	
     	return new ItemStack(getArmorMaterial().func_151685_b());
@@ -86,8 +87,8 @@ public class ItemMekanismArmor extends ItemArmor
 	@SideOnly(Side.CLIENT)
 	public ModelBiped getArmorModel(EntityLivingBase entityLiving, ItemStack itemStack, int armorSlot)
 	{
-		if(itemStack.getItem() == MekanismTools.GlowstoneHelmet || itemStack.getItem() == MekanismTools.GlowstoneChestplate ||
-				itemStack.getItem() == MekanismTools.GlowstoneLeggings || itemStack.getItem() == MekanismTools.GlowstoneBoots)
+		if(itemStack.getItem() == ToolsItems.GlowstoneHelmet || itemStack.getItem() == ToolsItems.GlowstoneChestplate ||
+				itemStack.getItem() == ToolsItems.GlowstoneLeggings || itemStack.getItem() == ToolsItems.GlowstoneBoots)
 		{
 			return ModelCustomArmor.getGlow(armorSlot);
 		}

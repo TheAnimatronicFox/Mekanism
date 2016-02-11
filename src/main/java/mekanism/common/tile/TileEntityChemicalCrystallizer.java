@@ -1,66 +1,46 @@
 package mekanism.common.tile;
 
-import java.util.ArrayList;
-
+import io.netty.buffer.ByteBuf;
 import mekanism.api.Coord4D;
 import mekanism.api.EnumColor;
+import mekanism.api.MekanismConfig.usage;
 import mekanism.api.Range4D;
-import mekanism.api.gas.Gas;
-import mekanism.api.gas.GasRegistry;
-import mekanism.api.gas.GasStack;
-import mekanism.api.gas.GasTank;
-import mekanism.api.gas.GasTransmission;
-import mekanism.api.gas.IGasHandler;
-import mekanism.api.gas.IGasItem;
-import mekanism.api.gas.ITubeConnection;
-import mekanism.client.sound.IHasSound;
-import mekanism.common.IActiveState;
-import mekanism.common.IEjector;
-import mekanism.common.IInvConfiguration;
-import mekanism.common.IRedstoneControl;
-import mekanism.common.ISustainedData;
-import mekanism.common.IUpgradeTile;
+import mekanism.api.gas.*;
+import mekanism.api.transmitters.TransmissionType;
 import mekanism.common.Mekanism;
 import mekanism.common.SideData;
+import mekanism.common.Upgrade;
+import mekanism.common.base.*;
 import mekanism.common.block.BlockMachine.MachineType;
 import mekanism.common.network.PacketTileEntity.TileEntityMessage;
 import mekanism.common.recipe.RecipeHandler;
+import mekanism.common.recipe.inputs.GasInput;
+import mekanism.common.recipe.machines.CrystallizerRecipe;
+import mekanism.common.tile.component.TileComponentConfig;
 import mekanism.common.tile.component.TileComponentEjector;
 import mekanism.common.tile.component.TileComponentUpgrade;
 import mekanism.common.util.ChargeUtils;
 import mekanism.common.util.InventoryUtils;
 import mekanism.common.util.MekanismUtils;
-
-import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraftforge.common.util.ForgeDirection;
-import net.minecraftforge.fluids.FluidContainerRegistry;
-import net.minecraftforge.fluids.FluidRegistry;
 
-import io.netty.buffer.ByteBuf;
+import java.util.ArrayList;
 
-public class TileEntityChemicalCrystallizer extends TileEntityElectricBlock implements IActiveState, IGasHandler, ITubeConnection, IRedstoneControl, IHasSound, IInvConfiguration, IUpgradeTile, ISustainedData
+public class TileEntityChemicalCrystallizer extends TileEntityNoisyElectricBlock implements IGasHandler, ITubeConnection, IRedstoneControl, ISideConfiguration, IUpgradeTile, ISustainedData, ITankManager
 {
 	public static final int MAX_GAS = 10000;
-	public static final int MAX_FLUID = 10000;
-
-	public byte[] sideConfig = new byte[] {0, 3, 0, 0, 1, 2};
-
-	public ArrayList<SideData> sideOutputs = new ArrayList<SideData>();
-
+	
 	public GasTank inputTank = new GasTank(MAX_GAS);
-
-	public static int WATER_USAGE = 5;
 
 	public int updateDelay;
 
-	public int gasOutput = 16;
-
 	public int operatingTicks;
 
-	public int TICKS_REQUIRED = 200;
+	public int BASE_TICKS_REQUIRED = 200;
+
+	public int ticksRequired = 200;
 
 	public boolean isActive;
 
@@ -72,43 +52,58 @@ public class TileEntityChemicalCrystallizer extends TileEntityElectricBlock impl
 
 	public float spin;
 
-	public final double ENERGY_USAGE = Mekanism.chemicalCrystallizerUsage;
+	public final double BASE_ENERGY_USAGE = usage.chemicalCrystallizerUsage;
+
+	public double energyUsage = usage.chemicalCrystallizerUsage;
+
+	public CrystallizerRecipe cachedRecipe;
 
 	/** This machine's current RedstoneControl type. */
 	public RedstoneControl controlType = RedstoneControl.DISABLED;
 
+	public TileComponentUpgrade upgradeComponent;
 	public TileComponentEjector ejectorComponent;
-	public TileComponentUpgrade upgradeComponent = new TileComponentUpgrade(this, 3);
+	public TileComponentConfig configComponent;
 
 	public TileEntityChemicalCrystallizer()
 	{
-		super("ChemicalCrystallizer", MachineType.CHEMICAL_CRYSTALLIZER.baseEnergy);
+		super("machine.crystallizer", "ChemicalCrystallizer", MachineType.CHEMICAL_CRYSTALLIZER.baseEnergy);
 
-		sideOutputs.add(new SideData(EnumColor.GREY, InventoryUtils.EMPTY));
-		sideOutputs.add(new SideData(EnumColor.PURPLE, new int[] {0}));
-		sideOutputs.add(new SideData(EnumColor.DARK_BLUE, new int[] {1}));
-		sideOutputs.add(new SideData(EnumColor.DARK_GREEN, new int[] {2}));
-
+		configComponent = new TileComponentConfig(this, TransmissionType.ITEM, TransmissionType.ENERGY, TransmissionType.GAS);
+		
+		configComponent.addOutput(TransmissionType.ITEM, new SideData("None", EnumColor.GREY, InventoryUtils.EMPTY));
+		configComponent.addOutput(TransmissionType.ITEM, new SideData("Gas", EnumColor.PURPLE, new int[] {0}));
+		configComponent.addOutput(TransmissionType.ITEM, new SideData("Output", EnumColor.DARK_BLUE, new int[] {1}));
+		configComponent.addOutput(TransmissionType.ITEM, new SideData("Energy", EnumColor.DARK_GREEN, new int[] {2}));
+		configComponent.setConfig(TransmissionType.ITEM, new byte[] {0, 3, 0, 0, 1, 2});
+		
+		configComponent.addOutput(TransmissionType.GAS, new SideData("None", EnumColor.GREY, InventoryUtils.EMPTY));
+		configComponent.addOutput(TransmissionType.GAS, new SideData("Gas", EnumColor.YELLOW, new int[] {0}));
+		configComponent.setConfig(TransmissionType.GAS, new byte[] {0, 0, 0, 0, 1, 0});
+		configComponent.setCanEject(TransmissionType.GAS, false);
+		
+		configComponent.setInputEnergyConfig();
+		
 		inventory = new ItemStack[4];
-		ejectorComponent = new TileComponentEjector(this, sideOutputs.get(2));
+		
+		upgradeComponent = new TileComponentUpgrade(this, 3);
+		ejectorComponent = new TileComponentEjector(this);
+		ejectorComponent.setOutputData(TransmissionType.ITEM, configComponent.getOutputs(TransmissionType.ITEM).get(2));
 	}
 
 	@Override
 	public void onUpdate()
 	{
-		if(worldObj.isRemote)
+		super.onUpdate();
+		
+		if(worldObj.isRemote && updateDelay > 0)
 		{
-			Mekanism.proxy.registerSound(this);
+			updateDelay--;
 
-			if(updateDelay > 0)
+			if(updateDelay == 0 && clientActive != isActive)
 			{
-				updateDelay--;
-
-				if(updateDelay == 0 && clientActive != isActive)
-				{
-					isActive = clientActive;
-					MekanismUtils.updateBlock(worldObj, xCoord, yCoord, zCoord);
-				}
+				isActive = clientActive;
+				MekanismUtils.updateBlock(worldObj, xCoord, yCoord, zCoord);
 			}
 		}
 
@@ -130,22 +125,22 @@ public class TileEntityChemicalCrystallizer extends TileEntityElectricBlock impl
 			{
 				inputTank.receive(GasTransmission.removeGas(inventory[0], inputTank.getGasType(), inputTank.getNeeded()), true);
 			}
+			
+			CrystallizerRecipe recipe = getRecipe();
 
-			if(canOperate() && MekanismUtils.canFunction(this) && getEnergy() >= MekanismUtils.getEnergyPerTick(this, ENERGY_USAGE))
+			if(canOperate(recipe) && MekanismUtils.canFunction(this) && getEnergy() >= energyUsage)
 			{
 				setActive(true);
 
-				if((operatingTicks+1) < MekanismUtils.getTicks(this, TICKS_REQUIRED))
+				setEnergy(getEnergy() - energyUsage);
+				
+				if((operatingTicks+1) < ticksRequired)
 				{
 					operatingTicks++;
-					setEnergy(getEnergy() - MekanismUtils.getEnergyPerTick(this, ENERGY_USAGE));
 				}
-				else if((operatingTicks+1) >= MekanismUtils.getTicks(this, TICKS_REQUIRED))
-				{
-					operate();
-
+				else {
+					operate(recipe);
 					operatingTicks = 0;
-					setEnergy(getEnergy() - MekanismUtils.getEnergyPerTick(this, ENERGY_USAGE));
 				}
 			}
 			else {
@@ -155,7 +150,7 @@ public class TileEntityChemicalCrystallizer extends TileEntityElectricBlock impl
 				}
 			}
 
-			if(!canOperate())
+			if(!canOperate(recipe))
 			{
 				operatingTicks = 0;
 			}
@@ -164,80 +159,43 @@ public class TileEntityChemicalCrystallizer extends TileEntityElectricBlock impl
 		}
 	}
 
-	public boolean canOperate()
+	public GasInput getInput()
 	{
-		if(inputTank.getGas() == null)
-		{
-			return false;
-		}
-
-		ItemStack itemstack = RecipeHandler.getChemicalCrystallizerOutput(inputTank, false);
-
-		if(itemstack == null)
-		{
-			return false;
-		}
-
-		if(inventory[1] == null)
-		{
-			return true;
-		}
-
-		if(!inventory[1].isItemEqual(itemstack))
-		{
-			return false;
-		}
-		else {
-			return inventory[1].stackSize + itemstack.stackSize <= inventory[1].getMaxStackSize();
-		}
+		return new GasInput(inputTank.getGas());
 	}
 
-	public void operate()
+	public CrystallizerRecipe getRecipe()
 	{
-		ItemStack itemstack = RecipeHandler.getChemicalCrystallizerOutput(inputTank, true);
-
-		if(inventory[1] == null)
+		GasInput input = getInput();
+		
+		if(cachedRecipe == null || !input.testEquality(cachedRecipe.getInput()))
 		{
-			inventory[1] = itemstack;
+			cachedRecipe = RecipeHandler.getChemicalCrystallizerRecipe(getInput());
 		}
-		else {
-			inventory[1].stackSize += itemstack.stackSize;
-		}
+		
+		return cachedRecipe;
+	}
+
+	public boolean canOperate(CrystallizerRecipe recipe)
+	{
+		return recipe != null && recipe.canOperate(inputTank, inventory);
+	}
+
+	public void operate(CrystallizerRecipe recipe)
+	{
+		recipe.operate(inputTank, inventory);
 
 		markDirty();
-		ejectorComponent.onOutput();
+		ejectorComponent.outputItems();
 	}
 
 	@Override
 	public void handlePacketData(ByteBuf dataStream)
 	{
-		if(!worldObj.isRemote)
-		{
-			int type = dataStream.readInt();
-
-			if(type == 0)
-			{
-				inputTank.setGas(null);
-			}
-
-			for(EntityPlayer player : playersUsing)
-			{
-				Mekanism.packetHandler.sendTo(new TileEntityMessage(Coord4D.get(this), getNetworkedData(new ArrayList())), (EntityPlayerMP)player);
-			}
-
-			return;
-		}
-
 		super.handlePacketData(dataStream);
 
 		isActive = dataStream.readBoolean();
 		operatingTicks = dataStream.readInt();
-
-		for(int i = 0; i < 6; i++)
-		{
-			sideConfig[i] = dataStream.readByte();
-		}
-
 		controlType = RedstoneControl.values()[dataStream.readInt()];
 
 		if(dataStream.readBoolean())
@@ -259,7 +217,6 @@ public class TileEntityChemicalCrystallizer extends TileEntityElectricBlock impl
 
 		data.add(isActive);
 		data.add(operatingTicks);
-		data.add(sideConfig);
 		data.add(controlType.ordinal());
 
 		if(inputTank.getGas() != null)
@@ -285,14 +242,6 @@ public class TileEntityChemicalCrystallizer extends TileEntityElectricBlock impl
 		controlType = RedstoneControl.values()[nbtTags.getInteger("controlType")];
 
 		inputTank.read(nbtTags.getCompoundTag("rightTank"));
-
-		if(nbtTags.hasKey("sideDataStored"))
-		{
-			for(int i = 0; i < 6; i++)
-			{
-				sideConfig[i] = nbtTags.getByte("config"+i);
-			}
-		}
 	}
 
 	@Override
@@ -307,11 +256,6 @@ public class TileEntityChemicalCrystallizer extends TileEntityElectricBlock impl
 		nbtTags.setTag("rightTank", inputTank.write(new NBTTagCompound()));
 
 		nbtTags.setBoolean("sideDataStored", true);
-
-		for(int i = 0; i < 6; i++)
-		{
-			nbtTags.setByte("config"+i, sideConfig[i]);
-		}
 	}
 
 	@Override
@@ -320,22 +264,11 @@ public class TileEntityChemicalCrystallizer extends TileEntityElectricBlock impl
 		return i != 0 && i != 1;
 	}
 
-	public int getScaledInputGasLevel(int i)
-	{
-		return inputTank != null ? inputTank.getStored()*i / MAX_GAS : 0;
-	}
-
 	public double getScaledProgress()
 	{
-		return ((double)operatingTicks) / ((double)MekanismUtils.getTicks(this, TICKS_REQUIRED));
+		return ((double)operatingTicks) / (double)ticksRequired;
 	}
 	
-	@Override
-	public double getMaxEnergy()
-	{
-		return MekanismUtils.getMaxEnergy(this, MAX_ELECTRICITY);
-	}
-
 	@Override
 	public void setActive(boolean active)
 	{
@@ -371,13 +304,14 @@ public class TileEntityChemicalCrystallizer extends TileEntityElectricBlock impl
 	@Override
 	public boolean canTubeConnect(ForgeDirection side)
 	{
-		return side == MekanismUtils.getLeft(facing);
+		return configComponent.getOutput(TransmissionType.GAS, side.ordinal(), facing).hasSlot(0);
 	}
 
 	@Override
 	public boolean canReceiveGas(ForgeDirection side, Gas type)
 	{
-		return side == MekanismUtils.getLeft(facing) && inputTank.canReceive(type);
+		return configComponent.getOutput(TransmissionType.GAS, side.ordinal(), facing).hasSlot(0) && inputTank.canReceive(type) &&
+                RecipeHandler.Recipe.CHEMICAL_CRYSTALLIZER.containsRecipe(type);
 	}
 
 	@Override
@@ -394,20 +328,38 @@ public class TileEntityChemicalCrystallizer extends TileEntityElectricBlock impl
 	}
 
 	@Override
-	public int receiveGas(ForgeDirection side, GasStack stack)
+	public boolean canPulse()
+	{
+		return false;
+	}
+
+	@Override
+	public int receiveGas(ForgeDirection side, GasStack stack, boolean doTransfer)
 	{
 		if(canReceiveGas(side, stack.getGas()))
 		{
-			return inputTank.receive(stack, true);
+			return inputTank.receive(stack, doTransfer);
 		}
 
 		return 0;
 	}
 
 	@Override
-	public GasStack drawGas(ForgeDirection side, int amount)
+	public int receiveGas(ForgeDirection side, GasStack stack)
+	{
+		return receiveGas(side, stack, true);
+	}
+
+	@Override
+	public GasStack drawGas(ForgeDirection side, int amount, boolean doTransfer)
 	{
 		return null;
+	}
+
+	@Override
+	public GasStack drawGas(ForgeDirection side, int amount)
+	{
+		return drawGas(side, amount, true);
 	}
 
 	@Override
@@ -421,7 +373,8 @@ public class TileEntityChemicalCrystallizer extends TileEntityElectricBlock impl
 	{
 		if(slotID == 0)
 		{
-			return FluidContainerRegistry.getFluidForFilledItem(itemstack) != null && FluidContainerRegistry.getFluidForFilledItem(itemstack).getFluid() == FluidRegistry.WATER;
+			return itemstack != null && itemstack.getItem() instanceof IGasItem && ((IGasItem)itemstack.getItem()).getGas(itemstack) != null &&
+                    RecipeHandler.Recipe.CHEMICAL_CRYSTALLIZER.containsRecipe(((IGasItem)itemstack.getItem()).getGas(itemstack).getGas());
 		}
 		else if(slotID == 2)
 		{
@@ -436,7 +389,7 @@ public class TileEntityChemicalCrystallizer extends TileEntityElectricBlock impl
 	{
 		if(slotID == 0)
 		{
-			return itemstack != null && itemstack.getItem() instanceof IGasItem && ((IGasItem)itemstack.getItem()).canProvideGas(itemstack, null);
+			return itemstack != null && itemstack.getItem() instanceof IGasItem && ((IGasItem)itemstack.getItem()).getGas(itemstack) == null;
 		}
 		else if(slotID == 1)
 		{
@@ -453,44 +406,13 @@ public class TileEntityChemicalCrystallizer extends TileEntityElectricBlock impl
 	@Override
 	public int[] getAccessibleSlotsFromSide(int side)
 	{
-		if(side == MekanismUtils.getLeft(facing).ordinal())
-		{
-			return new int[] {0};
-		}
-		else if(side == MekanismUtils.getRight(facing).ordinal())
-		{
-			return new int[] {1};
-		}
-		else if(side == 0 || side == 1)
-		{
-			return new int[2];
-		}
-
-		return InventoryUtils.EMPTY;
+		return configComponent.getOutput(TransmissionType.ITEM, side, facing).availableSlots;
 	}
 
 	@Override
-	public String getSoundPath()
+	public TileComponentConfig getConfig()
 	{
-		return "ChemicalCrystallizer.ogg";
-	}
-
-	@Override
-	public float getVolumeMultiplier()
-	{
-		return 1;
-	}
-
-	@Override
-	public ArrayList<SideData> getSideData()
-	{
-		return sideOutputs;
-	}
-
-	@Override
-	public byte[] getConfiguration()
-	{
-		return sideConfig;
+		return configComponent;
 	}
 
 	@Override
@@ -503,38 +425,6 @@ public class TileEntityChemicalCrystallizer extends TileEntityElectricBlock impl
 	public IEjector getEjector()
 	{
 		return ejectorComponent;
-	}
-	
-	@Override
-	public int getEnergyMultiplier(Object... data)
-	{
-		return upgradeComponent.energyMultiplier;
-	}
-
-	@Override
-	public void setEnergyMultiplier(int multiplier, Object... data)
-	{
-		upgradeComponent.energyMultiplier = multiplier;
-		MekanismUtils.saveChunk(this);
-	}
-
-	@Override
-	public int getSpeedMultiplier(Object... data)
-	{
-		return upgradeComponent.speedMultiplier;
-	}
-
-	@Override
-	public void setSpeedMultiplier(int multiplier, Object... data)
-	{
-		upgradeComponent.speedMultiplier = multiplier;
-		MekanismUtils.saveChunk(this);
-	}
-
-	@Override
-	public boolean supportsUpgrades(Object... data) 
-	{
-		return true;
 	}
 
 	@Override
@@ -556,5 +446,31 @@ public class TileEntityChemicalCrystallizer extends TileEntityElectricBlock impl
 	public void readSustainedData(ItemStack itemStack) 
 	{
 		inputTank.setGas(GasStack.readFromNBT(itemStack.stackTagCompound.getCompoundTag("inputTank")));
+	}
+
+	@Override
+	public void recalculateUpgradables(Upgrade upgrade)
+	{
+		super.recalculateUpgradables(upgrade);
+
+		switch(upgrade)
+		{
+			case SPEED:
+				ticksRequired = MekanismUtils.getTicks(this, BASE_TICKS_REQUIRED);
+				energyUsage = MekanismUtils.getEnergyPerTick(this, BASE_ENERGY_USAGE);
+				break;
+			case ENERGY:
+				energyUsage = MekanismUtils.getEnergyPerTick(this, BASE_ENERGY_USAGE);
+				maxEnergy = MekanismUtils.getMaxEnergy(this, BASE_MAX_ENERGY);
+				break;
+			default:
+				break;
+		}
+	}
+	
+	@Override
+	public Object[] getTanks() 
+	{
+		return new Object[] {inputTank};
 	}
 }

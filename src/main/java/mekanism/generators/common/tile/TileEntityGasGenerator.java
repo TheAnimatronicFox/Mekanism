@@ -1,32 +1,18 @@
 package mekanism.generators.common.tile;
 
-import java.util.ArrayList;
-
-import mekanism.api.gas.Gas;
-import mekanism.api.gas.GasRegistry;
-import mekanism.api.gas.GasStack;
-import mekanism.api.gas.GasTank;
-import mekanism.api.gas.GasTransmission;
-import mekanism.api.gas.IGasHandler;
-import mekanism.api.gas.IGasItem;
-import mekanism.api.gas.ITubeConnection;
+import io.netty.buffer.ByteBuf;
+import mekanism.api.MekanismConfig.general;
+import mekanism.api.gas.*;
 import mekanism.common.FuelHandler;
 import mekanism.common.FuelHandler.FuelGas;
-import mekanism.common.ISustainedData;
-import mekanism.common.Mekanism;
+import mekanism.common.base.ISustainedData;
 import mekanism.common.util.ChargeUtils;
 import mekanism.common.util.MekanismUtils;
-
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraftforge.common.util.ForgeDirection;
-import cpw.mods.fml.common.Optional.Method;
 
-import io.netty.buffer.ByteBuf;
-
-import dan200.computercraft.api.lua.ILuaContext;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.peripheral.IComputerAccess;
+import java.util.ArrayList;
 
 public class TileEntityGasGenerator extends TileEntityGenerator implements IGasHandler, ITubeConnection, ISustainedData
 {
@@ -41,7 +27,7 @@ public class TileEntityGasGenerator extends TileEntityGenerator implements IGasH
 
 	public TileEntityGasGenerator()
 	{
-		super("GasGenerator", Mekanism.FROM_H2*100, Mekanism.FROM_H2*2);
+		super("gas", "GasGenerator", general.FROM_H2*100, general.FROM_H2*2);
 		inventory = new ItemStack[2];
 		fuelTank = new GasTank(MAX_GAS);
 	}
@@ -170,16 +156,16 @@ public class TileEntityGasGenerator extends TileEntityGenerator implements IGasH
 		return fuelTank.getStored()*i / MAX_GAS;
 	}
 
+    private static final String[] methods = new String[] {"getStored", "getOutput", "getMaxEnergy", "getEnergyNeeded", "getGas", "getGasNeeded"};
+
 	@Override
-	@Method(modid = "ComputerCraft")
-	public String[] getMethodNames()
+	public String[] getMethods()
 	{
-		return new String[] {"getStored", "getOutput", "getMaxEnergy", "getEnergyNeeded", "getGas", "getGasNeeded"};
+		return methods;
 	}
 
 	@Override
-	@Method(modid = "ComputerCraft")
-	public Object[] callMethod(IComputerAccess computer, ILuaContext context, int method, Object[] arguments) throws LuaException, InterruptedException
+	public Object[] invoke(int method, Object[] arguments) throws Exception
 	{
 		switch(method)
 		{
@@ -196,8 +182,7 @@ public class TileEntityGasGenerator extends TileEntityGenerator implements IGasH
 			case 5:
 				return new Object[] {fuelTank.getNeeded()};
 			default:
-				Mekanism.logger.error("Attempted to call unknown method with computer ID " + computer.getID());
-				return null;
+				throw new NoSuchMethodException();
 		}
 	}
 
@@ -240,15 +225,15 @@ public class TileEntityGasGenerator extends TileEntityGenerator implements IGasH
 	}
 
 	@Override
-	public int receiveGas(ForgeDirection side, GasStack stack)
+	public int receiveGas(ForgeDirection side, GasStack stack, boolean doTransfer)
 	{
 		boolean isTankEmpty = (fuelTank.getGas() == null);
 		
-		if(isTankEmpty || fuelTank.getGas().isGasEqual(stack))
+		if(canReceiveGas(side, stack.getGas()) && (isTankEmpty || fuelTank.getGas().isGasEqual(stack)))
 		{
-			int fuelReceived = fuelTank.receive(stack, true);
+			int fuelReceived = fuelTank.receive(stack, doTransfer);
 			
-			if(isTankEmpty && fuelReceived > 0) 
+			if(doTransfer && isTankEmpty && fuelReceived > 0) 
 			{
 				output = FuelHandler.getFuel(fuelTank.getGas().getGas()).energyPerTick*2;
 			}
@@ -257,6 +242,12 @@ public class TileEntityGasGenerator extends TileEntityGenerator implements IGasH
 		}
 
 		return 0;
+	}
+
+	@Override
+	public int receiveGas(ForgeDirection side, GasStack stack)
+	{
+		return receiveGas(side, stack, true);
 	}
 
 	@Override
@@ -290,9 +281,15 @@ public class TileEntityGasGenerator extends TileEntityGenerator implements IGasH
 	}
 
 	@Override
-	public GasStack drawGas(ForgeDirection side, int amount)
+	public GasStack drawGas(ForgeDirection side, int amount, boolean doTransfer)
 	{
 		return null;
+	}
+
+	@Override
+	public GasStack drawGas(ForgeDirection side, int amount)
+	{
+		return drawGas(side, amount, true);
 	}
 
 	@Override
@@ -323,8 +320,9 @@ public class TileEntityGasGenerator extends TileEntityGenerator implements IGasH
 		{
 			fuelTank.read(itemStack.stackTagCompound.getCompoundTag("fuelTank"));
 			
+			boolean isTankEmpty = (fuelTank.getGas() == null);
 			//Update energy output based on any existing fuel in tank
-			FuelGas fuel = FuelHandler.getFuel(fuelTank.getGas().getGas());
+			FuelGas fuel = (isTankEmpty) ? null : FuelHandler.getFuel(fuelTank.getGas().getGas());
 			
 			if(fuel != null) 
 			{

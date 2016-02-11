@@ -9,12 +9,10 @@ import mekanism.api.gas.GasStack;
 import mekanism.api.gas.IGasItem;
 import mekanism.client.MekKeyHandler;
 import mekanism.client.MekanismKeyHandler;
-import mekanism.common.ISustainedInventory;
 import mekanism.common.Mekanism;
+import mekanism.common.base.ISustainedInventory;
 import mekanism.common.tile.TileEntityGasTank;
 import mekanism.common.util.LangUtils;
-import mekanism.common.util.MekanismUtils;
-
 import net.minecraft.block.Block;
 import net.minecraft.client.settings.GameSettings;
 import net.minecraft.creativetab.CreativeTabs;
@@ -36,7 +34,7 @@ public class ItemBlockGasTank extends ItemBlock implements IGasItem, ISustainedI
 	public int MAX_GAS = 96000;
 
 	/** How fast this tank can transfer gas. */
-	public static final int TRANSFER_RATE = 16;
+	public static final int TRANSFER_RATE = 256;
 
 	public ItemBlockGasTank(Block block)
 	{
@@ -90,18 +88,18 @@ public class ItemBlockGasTank extends ItemBlock implements IGasItem, ISustainedI
 
 		if(gasStack == null)
 		{
-			list.add(MekanismUtils.localize("tooltip.noGas") + ".");
+			list.add(LangUtils.localize("tooltip.noGas") + ".");
 		}
 		else {
-			list.add(MekanismUtils.localize("tooltip.stored") + " " + gasStack.getGas().getLocalizedName() + ": " + gasStack.amount);
+			list.add(LangUtils.localize("tooltip.stored") + " " + gasStack.getGas().getLocalizedName() + ": " + gasStack.amount);
 		}
 
 		if(!MekKeyHandler.getIsKeyPressed(MekanismKeyHandler.sneakKey))
 		{
-			list.add(MekanismUtils.localize("tooltip.hold") + " " + EnumColor.AQUA + GameSettings.getKeyDisplayString(MekanismKeyHandler.sneakKey.getKeyCode()) + EnumColor.GREY + " " + MekanismUtils.localize("tooltip.forDetails"));
+			list.add(LangUtils.localize("tooltip.hold") + " " + EnumColor.AQUA + GameSettings.getKeyDisplayString(MekanismKeyHandler.sneakKey.getKeyCode()) + EnumColor.GREY + " " + LangUtils.localize("tooltip.forDetails") + ".");
 		}
 		else {
-			list.add(EnumColor.AQUA + MekanismUtils.localize("tooltip.inventory") + ": " + EnumColor.GREY + LangUtils.transYesNo(getInventory(itemstack) != null && getInventory(itemstack).tagCount() != 0));
+			list.add(EnumColor.AQUA + LangUtils.localize("tooltip.inventory") + ": " + EnumColor.GREY + LangUtils.transYesNo(getInventory(itemstack) != null && getInventory(itemstack).tagCount() != 0));
 		}
 	}
 

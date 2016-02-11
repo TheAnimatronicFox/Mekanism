@@ -1,29 +1,20 @@
 package mekanism.common.tile;
 
-import java.util.ArrayList;
-import java.util.EnumSet;
-
+import io.netty.buffer.ByteBuf;
 import mekanism.api.Coord4D;
 import mekanism.api.EnumColor;
 import mekanism.api.IFilterAccess;
 import mekanism.api.Range4D;
 import mekanism.common.HashList;
-import mekanism.common.IActiveState;
-import mekanism.common.ILogisticalTransporter;
-import mekanism.common.IRedstoneControl;
-import mekanism.common.ISustainedData;
 import mekanism.common.Mekanism;
+import mekanism.common.base.*;
 import mekanism.common.block.BlockMachine.MachineType;
+import mekanism.common.content.transporter.Finder.FirstFinder;
+import mekanism.common.content.transporter.*;
 import mekanism.common.network.PacketTileEntity.TileEntityMessage;
-import mekanism.common.transporter.Finder.FirstFinder;
-import mekanism.common.transporter.InvStack;
-import mekanism.common.transporter.TItemStackFilter;
-import mekanism.common.transporter.TransporterFilter;
-import mekanism.common.transporter.TransporterManager;
 import mekanism.common.util.InventoryUtils;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.TransporterUtils;
-
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.inventory.IInventory;
@@ -34,7 +25,8 @@ import net.minecraft.tileentity.TileEntity;
 import net.minecraftforge.common.util.Constants.NBT;
 import net.minecraftforge.common.util.ForgeDirection;
 
-import io.netty.buffer.ByteBuf;
+import java.util.ArrayList;
+import java.util.EnumSet;
 
 public class TileEntityLogisticalSorter extends TileEntityElectricBlock implements IRedstoneControl, IActiveState, IFilterAccess, ISustainedData
 {
@@ -86,19 +78,26 @@ public class TileEntityLogisticalSorter extends TileEntityElectricBlock implemen
 				TileEntity back = Coord4D.get(this).getFromSide(ForgeDirection.getOrientation(facing).getOpposite()).getTileEntity(worldObj);
 				TileEntity front = Coord4D.get(this).getFromSide(ForgeDirection.getOrientation(facing)).getTileEntity(worldObj);
 
-				if(back instanceof IInventory && (front instanceof ILogisticalTransporter || front instanceof IInventory))
+				if(back instanceof IInventory && (front instanceof ITransporterTile || front instanceof IInventory))
 				{
-					IInventory inventory = (IInventory)back;
+					IInventory inventory = InventoryUtils.checkChestInv((IInventory)back);
 
 					boolean sentItems = false;
 					int min = 0;
 
+					outer:
 					for(TransporterFilter filter : filters)
 					{
-						InvStack invStack = filter.getStackFromInventory(inventory, ForgeDirection.getOrientation(facing).getOpposite());
-
-						if(invStack != null && invStack.getStack() != null)
+						inner:
+						for(StackSearcher search = new StackSearcher(inventory, ForgeDirection.getOrientation(facing).getOpposite()); search.i >= 0;)
 						{
+							InvStack invStack = filter.getStackFromInventory(search);
+
+							if(invStack == null || invStack.getStack() == null)
+							{
+								break inner;
+							}
+
 							if(filter.canFilter(invStack.getStack()))
 							{
 								if(filter instanceof TItemStackFilter)
@@ -110,19 +109,20 @@ public class TileEntityLogisticalSorter extends TileEntityElectricBlock implemen
 										min = itemFilter.min;
 									}
 								}
-								
+
 								ItemStack used = emitItemToTransporter(front, invStack, filter.color, min);
-								
+
 								if(used != null)
 								{
 									invStack.use(used.stackSize);
 									inventory.markDirty();
 									setActive(true);
 									sentItems = true;
-									
-									break;
+
+									break outer;
 								}
 							}
+
 						}
 					}
 
@@ -164,9 +164,9 @@ public class TileEntityLogisticalSorter extends TileEntityElectricBlock implemen
 	{
 		ItemStack used = null;
 
-		if(front instanceof ILogisticalTransporter)
+		if(front instanceof ITransporterTile)
 		{
-			ILogisticalTransporter transporter = (ILogisticalTransporter)front;
+			ILogisticalTransporter transporter = ((ITransporterTile)front).getTransmitter();
 
 			if(!roundRobin)
 			{
@@ -292,7 +292,20 @@ public class TileEntityLogisticalSorter extends TileEntityElectricBlock implemen
 				roundRobin = !roundRobin;
 				rrIndex = 0;
 			}
-
+			else if(type == 3)
+			{
+				// Move filter up
+				int filterIndex = dataStream.readInt();
+				filters.swap( filterIndex, filterIndex - 1 );
+				openInventory();
+			}
+			else if(type == 4)
+			{
+				// Move filter down
+				int filterIndex = dataStream.readInt();
+				filters.swap( filterIndex, filterIndex + 1 );
+				openInventory();
+			}
 			return;
 		}
 
@@ -461,7 +474,7 @@ public class TileEntityLogisticalSorter extends TileEntityElectricBlock implemen
 
 		return stack;
 	}
-
+	
 	@Override
 	public boolean canExtractItem(int slotID, ItemStack itemstack, int side)
 	{
@@ -488,7 +501,7 @@ public class TileEntityLogisticalSorter extends TileEntityElectricBlock implemen
 			return new int[] {0};
 		}
 
-		return null;
+		return InventoryUtils.EMPTY;
 	}
 
 	@Override
@@ -510,6 +523,12 @@ public class TileEntityLogisticalSorter extends TileEntityElectricBlock implemen
 	public void setControlType(RedstoneControl type)
 	{
 		controlType = type;
+	}
+
+	@Override
+	public boolean canPulse()
+	{
+		return true;
 	}
 
 	@Override
@@ -549,7 +568,7 @@ public class TileEntityLogisticalSorter extends TileEntityElectricBlock implemen
 	}
 
 	@Override
-	protected EnumSet<ForgeDirection> getConsumingSides()
+	public EnumSet<ForgeDirection> getConsumingSides()
 	{
 		return EnumSet.noneOf(ForgeDirection.class);
 	}

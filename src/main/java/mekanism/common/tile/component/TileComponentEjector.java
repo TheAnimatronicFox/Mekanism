@@ -1,28 +1,38 @@
 package mekanism.common.tile.component;
 
+import io.netty.buffer.ByteBuf;
+
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import mekanism.api.Coord4D;
 import mekanism.api.EnumColor;
-import mekanism.common.IEjector;
-import mekanism.common.IInvConfiguration;
-import mekanism.common.ILogisticalTransporter;
-import mekanism.common.ITileComponent;
+import mekanism.api.gas.GasStack;
+import mekanism.api.gas.GasTank;
+import mekanism.api.gas.GasTransmission;
+import mekanism.api.transmitters.TransmissionType;
 import mekanism.common.SideData;
+import mekanism.common.base.IEjector;
+import mekanism.common.base.ILogisticalTransporter;
+import mekanism.common.base.ISideConfiguration;
+import mekanism.common.base.ITankManager;
+import mekanism.common.base.ITileComponent;
+import mekanism.common.base.ITransporterTile;
+import mekanism.common.content.transporter.TransporterManager;
 import mekanism.common.tile.TileEntityContainerBlock;
-import mekanism.common.transporter.TransporterManager;
 import mekanism.common.util.InventoryUtils;
 import mekanism.common.util.MekanismUtils;
+import mekanism.common.util.PipeUtils;
 import mekanism.common.util.TransporterUtils;
-
 import net.minecraft.inventory.IInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraftforge.common.util.ForgeDirection;
-
-import io.netty.buffer.ByteBuf;
+import net.minecraftforge.fluids.FluidStack;
+import net.minecraftforge.fluids.FluidTank;
 
 public class TileComponentEjector implements ITileComponent, IEjector
 {
@@ -30,32 +40,48 @@ public class TileComponentEjector implements ITileComponent, IEjector
 
 	public boolean strictInput;
 
-	public boolean ejecting;
-
 	public EnumColor outputColor;
 
 	public EnumColor[] inputColors = new EnumColor[] {null, null, null, null, null, null};
 
 	public int tickDelay = 0;
 
-	public SideData sideData;
+	public Map<TransmissionType, SideData> sideData = new HashMap<TransmissionType, SideData>();
 
-	public int[] trackers;
+	public Map<TransmissionType, int[]> trackers = new HashMap<TransmissionType, int[]>();
+	
+	public static final int GAS_OUTPUT = 256;
+	public static final int FLUID_OUTPUT = 256;
 
-	public TileComponentEjector(TileEntityContainerBlock tile, SideData data)
+	public TileComponentEjector(TileEntityContainerBlock tile)
 	{
 		tileEntity = tile;
-		sideData = data;
-		trackers = new int[sideData.availableSlots.length];
 
 		tile.components.add(this);
 	}
+	
+	public TileComponentEjector setOutputData(TransmissionType type, SideData data)
+	{
+		sideData.put(type, data);
+		trackers.put(type, new int[data.availableSlots.length]);
+		
+		return this;
+	}
+	
+	public void readFrom(TileComponentEjector ejector)
+	{
+		strictInput = ejector.strictInput;
+		outputColor = ejector.outputColor;
+		inputColors = ejector.inputColors;
+		tickDelay = ejector.tickDelay;
+		sideData = ejector.sideData;
+	}
 
-	private List<ForgeDirection> getTrackedOutputs(int index, List<ForgeDirection> dirs)
+	private List<ForgeDirection> getTrackedOutputs(TransmissionType type, int index, List<ForgeDirection> dirs)
 	{
 		List<ForgeDirection> sides = new ArrayList<ForgeDirection>();
 
-		for(int i = trackers[index]+1; i <= trackers[index]+6; i++)
+		for(int i = trackers.get(type)[index]+1; i <= trackers.get(type)[index]+6; i++)
 		{
 			for(ForgeDirection side : dirs)
 			{
@@ -74,36 +100,80 @@ public class TileComponentEjector implements ITileComponent, IEjector
 	{
 		if(tickDelay == 0)
 		{
-			onOutput();
+			if(sideData.get(TransmissionType.ITEM) != null)
+			{
+				outputItems();
+			}
 		}
 		else {
 			tickDelay--;
 		}
-	}
-
-	@Override
-	public void onOutput()
-	{
-		if(!ejecting || tileEntity.getWorldObj().isRemote)
+		
+		if(!tileEntity.getWorldObj().isRemote)
 		{
-			return;
+			if(sideData.get(TransmissionType.GAS) != null && getEjecting(TransmissionType.GAS))
+			{
+				SideData data = sideData.get(TransmissionType.GAS);
+				List<ForgeDirection> outputSides = getOutputSides(TransmissionType.GAS, data);
+				
+				GasTank tank = (GasTank)((ITankManager)tileEntity).getTanks()[data.availableSlots[0]];
+				
+				if(tank.getStored() > 0)
+				{
+					GasStack toEmit = tank.getGas().copy().withAmount(Math.min(GAS_OUTPUT, tank.getStored()));
+					int emit = GasTransmission.emit(outputSides, toEmit, tileEntity);
+					tank.draw(emit, true);
+				}
+			}
+			
+			if(sideData.get(TransmissionType.FLUID) != null && getEjecting(TransmissionType.FLUID))
+			{
+				SideData data = sideData.get(TransmissionType.FLUID);
+				List<ForgeDirection> outputSides = getOutputSides(TransmissionType.FLUID, data);
+				
+				FluidTank tank = (FluidTank)((ITankManager)tileEntity).getTanks()[data.availableSlots[0]];
+				
+				if(tank.getFluidAmount() > 0)
+				{
+					FluidStack toEmit = new FluidStack(tank.getFluid().getFluid(), Math.min(FLUID_OUTPUT, tank.getFluidAmount()));
+					int emit = PipeUtils.emit(outputSides, toEmit, tileEntity);
+					tank.drain(emit, true);
+				}
+			}
 		}
-
+	}
+	
+	public List<ForgeDirection> getOutputSides(TransmissionType type, SideData data)
+	{
 		List<ForgeDirection> outputSides = new ArrayList<ForgeDirection>();
 
-		IInvConfiguration configurable = (IInvConfiguration)tileEntity;
+		ISideConfiguration configurable = (ISideConfiguration)tileEntity;
 
-		for(int i = 0; i < configurable.getConfiguration().length; i++)
+		for(int i = 0; i < configurable.getConfig().getConfig(type).length; i++)
 		{
-			if(configurable.getConfiguration()[i] == configurable.getSideData().indexOf(sideData))
+			if(configurable.getConfig().getConfig(type)[i] == configurable.getConfig().getOutputs(type).indexOf(data))
 			{
 				outputSides.add(ForgeDirection.getOrientation(MekanismUtils.getBaseOrientation(i, tileEntity.facing)));
 			}
 		}
+		
+		return outputSides;
+	}
 
-		for(int index = 0; index < sideData.availableSlots.length; index++)
+	@Override
+	public void outputItems()
+	{
+		if(!getEjecting(TransmissionType.ITEM) || tileEntity.getWorldObj().isRemote)
 		{
-			int slotID = sideData.availableSlots[index];
+			return;
+		}
+
+		SideData data = sideData.get(TransmissionType.ITEM);
+		List<ForgeDirection> outputSides = getOutputSides(TransmissionType.ITEM, data);
+
+		for(int index = 0; index < sideData.get(TransmissionType.ITEM).availableSlots.length; index++)
+		{
+			int slotID = sideData.get(TransmissionType.ITEM).availableSlots[index];
 
 			if(tileEntity.inventory[slotID] == null)
 			{
@@ -111,20 +181,20 @@ public class TileComponentEjector implements ITileComponent, IEjector
 			}
 
 			ItemStack stack = tileEntity.inventory[slotID];
-			List<ForgeDirection> outputs = getTrackedOutputs(index, outputSides);
+			List<ForgeDirection> outputs = getTrackedOutputs(TransmissionType.ITEM, index, outputSides);
 
 			for(ForgeDirection side : outputs)
 			{
 				TileEntity tile = Coord4D.get(tileEntity).getFromSide(side).getTileEntity(tileEntity.getWorldObj());
 				ItemStack prev = stack.copy();
 
-				if(tile instanceof IInventory && !(tile instanceof ILogisticalTransporter))
+				if(tile instanceof IInventory && !(tile instanceof ITransporterTile))
 				{
 					stack = InventoryUtils.putStackInInventory((IInventory)tile, stack, side.ordinal(), false);
 				}
-				else if(tile instanceof ILogisticalTransporter)
+				else if(tile instanceof ITransporterTile)
 				{
-					ItemStack rejects = TransporterUtils.insert(tileEntity, (ILogisticalTransporter)tile, stack, outputColor, true, 0);
+					ItemStack rejects = TransporterUtils.insert(tileEntity, ((ITransporterTile)tile).getTransmitter(), stack, outputColor, true, 0);
 
 					if(TransporterManager.didEmit(stack, rejects))
 					{
@@ -134,7 +204,7 @@ public class TileComponentEjector implements ITileComponent, IEjector
 
 				if(stack == null || prev.stackSize != stack.stackSize)
 				{
-					trackers[index] = side.ordinal();
+					trackers.get(TransmissionType.ITEM)[index] = side.ordinal();
 				}
 
 				if(stack == null)
@@ -148,19 +218,6 @@ public class TileComponentEjector implements ITileComponent, IEjector
 		}
 
 		tickDelay = 20;
-	}
-
-	@Override
-	public boolean isEjecting()
-	{
-		return ejecting;
-	}
-
-	@Override
-	public void setEjecting(boolean eject)
-	{
-		ejecting = eject;
-		MekanismUtils.saveChunk(tileEntity);
 	}
 
 	@Override
@@ -205,7 +262,6 @@ public class TileComponentEjector implements ITileComponent, IEjector
 	@Override
 	public void read(NBTTagCompound nbtTags)
 	{
-		ejecting = nbtTags.getBoolean("ejecting");
 		strictInput = nbtTags.getBoolean("strictInput");
 
 		if(nbtTags.hasKey("ejectColor"))
@@ -213,9 +269,12 @@ public class TileComponentEjector implements ITileComponent, IEjector
 			outputColor = TransporterUtils.colors.get(nbtTags.getInteger("ejectColor"));
 		}
 
-		for(int i = 0; i < sideData.availableSlots.length; i++)
+		for(TransmissionType type : sideData.keySet())
 		{
-			trackers[i] = nbtTags.getInteger("tracker" + i);
+			for(int i = 0; i < sideData.get(type).availableSlots.length; i++)
+			{
+				trackers.get(type)[i] = nbtTags.getInteger("tracker" + type.getTransmission() + i);
+			}
 		}
 
 		for(int i = 0; i < 6; i++)
@@ -238,7 +297,6 @@ public class TileComponentEjector implements ITileComponent, IEjector
 	@Override
 	public void read(ByteBuf dataStream)
 	{
-		ejecting = dataStream.readBoolean();
 		strictInput = dataStream.readBoolean();
 
 		int c = dataStream.readInt();
@@ -268,7 +326,6 @@ public class TileComponentEjector implements ITileComponent, IEjector
 	@Override
 	public void write(NBTTagCompound nbtTags)
 	{
-		nbtTags.setBoolean("ejecting", ejecting);
 		nbtTags.setBoolean("strictInput", strictInput);
 
 		if(outputColor != null)
@@ -276,9 +333,12 @@ public class TileComponentEjector implements ITileComponent, IEjector
 			nbtTags.setInteger("ejectColor", TransporterUtils.colors.indexOf(outputColor));
 		}
 
-		for(int i = 0; i < sideData.availableSlots.length; i++)
+		for(TransmissionType type : sideData.keySet())
 		{
-			nbtTags.setInteger("tracker" + i, trackers[i]);
+			for(int i = 0; i < sideData.get(type).availableSlots.length; i++)
+			{
+				nbtTags.setInteger("tracker" + type.getTransmission() + i, trackers.get(type)[i]);
+			}
 		}
 
 		for(int i = 0; i < 6; i++)
@@ -296,7 +356,6 @@ public class TileComponentEjector implements ITileComponent, IEjector
 	@Override
 	public void write(ArrayList data)
 	{
-		data.add(ejecting);
 		data.add(strictInput);
 
 		if(outputColor != null)
@@ -317,5 +376,10 @@ public class TileComponentEjector implements ITileComponent, IEjector
 				data.add(TransporterUtils.colors.indexOf(inputColors[i]));
 			}
 		}
+	}
+	
+	private boolean getEjecting(TransmissionType type)
+	{
+		return ((ISideConfiguration)tileEntity).getConfig().isEjecting(type);
 	}
 }

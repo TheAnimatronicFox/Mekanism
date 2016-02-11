@@ -1,19 +1,19 @@
 package mekanism.common.block;
 
-import java.util.List;
-import java.util.Random;
-
+import buildcraft.api.tools.IToolWrench;
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
 import mekanism.api.energy.IEnergizedItem;
-import mekanism.common.IEnergyCube;
-import mekanism.common.ISustainedInventory;
 import mekanism.common.ItemAttacher;
 import mekanism.common.Mekanism;
+import mekanism.common.MekanismBlocks;
 import mekanism.common.Tier.EnergyCubeTier;
+import mekanism.common.base.IEnergyCube;
+import mekanism.common.base.ISustainedInventory;
 import mekanism.common.item.ItemBlockEnergyCube;
 import mekanism.common.tile.TileEntityBasicBlock;
 import mekanism.common.tile.TileEntityEnergyCube;
 import mekanism.common.util.MekanismUtils;
-
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockContainer;
 import net.minecraft.block.material.Material;
@@ -25,35 +25,27 @@ import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.IIcon;
 import net.minecraft.util.MathHelper;
 import net.minecraft.util.MovingObjectPosition;
 import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
 import net.minecraftforge.common.util.ForgeDirection;
-import cpw.mods.fml.common.ModAPIManager;
-import cpw.mods.fml.common.Optional.Interface;
-import cpw.mods.fml.common.Optional.Method;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
 
-import buildcraft.api.tools.IToolWrench;
-import dan200.computercraft.api.peripheral.IPeripheral;
-import dan200.computercraft.api.peripheral.IPeripheralProvider;
+import java.util.List;
+import java.util.Random;
 
 /**
  * Block class for handling multiple energy cube block IDs.
  * 0: Basic Energy Cube
  * 1: Advanced Energy Cube
  * 2: Elite Energy Cube
+ * 3: Ultimate Energy Cube
+ * 4: Creative Energy Cube
  * @author AidanBrady
  *
  */
-@Interface(iface = "dan200.computercraft.api.peripheral.IPeripheralProvider", modid = "ComputerCraft")
-public class BlockEnergyCube extends BlockContainer implements IPeripheralProvider
+public class BlockEnergyCube extends BlockContainer
 {
-	public IIcon[][] icons = new IIcon[256][256];
-
 	public BlockEnergyCube()
 	{
 		super(Material.iron);
@@ -64,7 +56,10 @@ public class BlockEnergyCube extends BlockContainer implements IPeripheralProvid
 
 	@Override
 	@SideOnly(Side.CLIENT)
-	public void registerBlockIcons(IIconRegister register) {}
+	public void registerBlockIcons(IIconRegister register) 
+	{
+		blockIcon = register.registerIcon(BlockBasic.ICON_BASE);
+	}
 
 	@Override
 	public void onNeighborBlockChange(World world, int x, int y, int z, Block block)
@@ -134,9 +129,9 @@ public class BlockEnergyCube extends BlockContainer implements IPeripheralProvid
 			list.add(discharged);
 			ItemStack charged = new ItemStack(this);
 			((ItemBlockEnergyCube)charged.getItem()).setEnergyCubeTier(charged, tier);
-			((ItemBlockEnergyCube)charged.getItem()).setEnergy(charged, tier.MAX_ELECTRICITY);
+			((ItemBlockEnergyCube)charged.getItem()).setEnergy(charged, tier.maxEnergy);
 			list.add(charged);
-		};
+		}
 	}
 
 	@Override
@@ -166,8 +161,10 @@ public class BlockEnergyCube extends BlockContainer implements IPeripheralProvid
 					return true;
 				}
 
-				if(ModAPIManager.INSTANCE.hasAPI("BuildCraftAPI|tools") && tool instanceof IToolWrench)
-					((IToolWrench)tool).wrenchUsed(entityplayer, x, y, z);
+				if(MekanismUtils.isBCWrench(tool))
+                {
+                    ((IToolWrench) tool).wrenchUsed(entityplayer, x, y, z);
+                }
 
 				int change = ForgeDirection.ROTATION_MATRIX[side][tileEntity.facing];
 
@@ -199,8 +196,7 @@ public class BlockEnergyCube extends BlockContainer implements IPeripheralProvid
 			double motionY = (world.rand.nextFloat() * motion) + (1.0F - motion) * 0.5D;
 			double motionZ = (world.rand.nextFloat() * motion) + (1.0F - motion) * 0.5D;
 
-			EntityItem entityItem = new EntityItem(world, x + motionX, y + motionY, z + motionZ, getPickBlock(null, world, x, y, z));
-
+			EntityItem entityItem = new EntityItem(world, x + motionX, y + motionY, z + motionZ, getPickBlock(null, world, x, y, z, player));
 			world.spawnEntityInWorld(entityItem);
 		}
 
@@ -210,8 +206,7 @@ public class BlockEnergyCube extends BlockContainer implements IPeripheralProvid
 	@Override
 	public TileEntity createNewTileEntity(World world, int meta)
 	{
-		TileEntityEnergyCube tile = new TileEntityEnergyCube();
-		return tile;
+		return new TileEntityEnergyCube();
 	}
 
 	@Override
@@ -233,10 +228,10 @@ public class BlockEnergyCube extends BlockContainer implements IPeripheralProvid
 	}
 
 	@Override
-	public ItemStack getPickBlock(MovingObjectPosition target, World world, int x, int y, int z)
+    public ItemStack getPickBlock(MovingObjectPosition target, World world, int x, int y, int z, EntityPlayer player)
 	{
 		TileEntityEnergyCube tileEntity = (TileEntityEnergyCube)world.getTileEntity(x, y, z);
-		ItemStack itemStack = new ItemStack(Mekanism.EnergyCube);
+		ItemStack itemStack = new ItemStack(MekanismBlocks.EnergyCube);
 
 		IEnergyCube energyCube = (IEnergyCube)itemStack.getItem();
 		energyCube.setEnergyCubeTier(itemStack, tileEntity.tier);
@@ -245,14 +240,14 @@ public class BlockEnergyCube extends BlockContainer implements IPeripheralProvid
 		energizedItem.setEnergy(itemStack, tileEntity.electricityStored);
 
 		ISustainedInventory inventory = (ISustainedInventory)itemStack.getItem();
-		inventory.setInventory(((ISustainedInventory)tileEntity).getInventory(), itemStack);
+		inventory.setInventory(tileEntity.getInventory(), itemStack);
 
 		return itemStack;
 	}
 
 	public ItemStack dismantleBlock(World world, int x, int y, int z, boolean returnBlock)
 	{
-		ItemStack itemStack = getPickBlock(null, world, x, y, z);
+		ItemStack itemStack = getPickBlock(null, world, x, y, z, null);
 
 		world.setBlockToAir(x, y, z);
 
@@ -295,9 +290,11 @@ public class BlockEnergyCube extends BlockContainer implements IPeripheralProvid
 	{
 		TileEntity tile = world.getTileEntity(x, y, z);
 		ForgeDirection[] valid = new ForgeDirection[6];
+		
 		if(tile instanceof TileEntityBasicBlock)
 		{
 			TileEntityBasicBlock basicTile = (TileEntityBasicBlock)tile;
+			
 			for(ForgeDirection dir : ForgeDirection.VALID_DIRECTIONS)
 			{
 				if(basicTile.canSetFacing(dir.ordinal()))
@@ -306,6 +303,7 @@ public class BlockEnergyCube extends BlockContainer implements IPeripheralProvid
 				}
 			}
 		}
+		
 		return valid;
 	}
 
@@ -313,29 +311,18 @@ public class BlockEnergyCube extends BlockContainer implements IPeripheralProvid
 	public boolean rotateBlock(World world, int x, int y, int z, ForgeDirection axis)
 	{
 		TileEntity tile = world.getTileEntity(x, y, z);
+		
 		if(tile instanceof TileEntityBasicBlock)
 		{
 			TileEntityBasicBlock basicTile = (TileEntityBasicBlock)tile;
+			
 			if(basicTile.canSetFacing(axis.ordinal()))
 			{
 				basicTile.setFacing((short)axis.ordinal());
 				return true;
 			}
 		}
+		
 		return false;
-	}
-
-	@Override
-	@Method(modid = "ComputerCraft")
-	public IPeripheral getPeripheral(World world, int x, int y, int z, int side)
-	{
-		TileEntity te = world.getTileEntity(x, y, z);
-
-		if(te != null && te instanceof IPeripheral)
-		{
-			return (IPeripheral)te;
-		}
-
-		return null;
 	}
 }

@@ -1,55 +1,53 @@
 package mekanism.common.multipart;
 
-import java.util.List;
-import java.util.Set;
-
-import mekanism.api.energy.ICableOutputter;
-import mekanism.api.energy.IStrictEnergyAcceptor;
-import mekanism.api.energy.IStrictEnergyStorage;
-import mekanism.api.transmitters.IGridTransmitter;
-import mekanism.api.transmitters.TransmissionType;
-import mekanism.client.MekanismClient;
-import mekanism.client.render.RenderPartTransmitter;
-import mekanism.common.EnergyNetwork;
-import mekanism.common.Mekanism;
-import mekanism.common.Tier;
-import mekanism.common.util.CableUtils;
-import mekanism.common.util.MekanismUtils;
-
-import net.minecraft.client.renderer.texture.IIconRegister;
-import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.IIcon;
-import net.minecraftforge.common.util.ForgeDirection;
+import codechicken.lib.vec.Vector3;
+import cofh.api.energy.IEnergyHandler;
+import cofh.api.energy.IEnergyProvider;
 import cpw.mods.fml.common.Optional.Interface;
 import cpw.mods.fml.common.Optional.InterfaceList;
 import cpw.mods.fml.common.Optional.Method;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
-
-import codechicken.lib.vec.Vector3;
-import cofh.api.energy.IEnergyHandler;
-import cofh.api.energy.IEnergyProvider;
 import ic2.api.energy.tile.IEnergySource;
+import mekanism.api.MekanismConfig.client;
+import mekanism.api.MekanismConfig.general;
+import mekanism.api.energy.EnergyStack;
+import mekanism.api.energy.ICableOutputter;
+import mekanism.api.energy.IStrictEnergyAcceptor;
+import mekanism.api.energy.IStrictEnergyStorage;
+import mekanism.api.transmitters.TransmissionType;
+import mekanism.client.render.RenderPartTransmitter;
+import mekanism.common.EnergyNetwork;
+import mekanism.common.Tier;
+import mekanism.common.base.EnergyAcceptorWrapper;
+import mekanism.common.util.CableUtils;
+import mekanism.common.util.MekanismUtils;
+import net.minecraft.client.renderer.texture.IIconRegister;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.tileentity.TileEntity;
+import net.minecraft.util.IIcon;
+import net.minecraftforge.common.util.ForgeDirection;
+
+import java.util.Collection;
+import java.util.List;
 
 @InterfaceList({
-		@Interface(iface = "cofh.api.energy.IEnergyHandler", modid = "CoFHAPI|energy"),
+		@Interface(iface = "cofh.api.energy.IEnergyHandler", modid = "CoFHCore"),
 })
-public class PartUniversalCable extends PartTransmitter<EnergyNetwork> implements IStrictEnergyAcceptor, IEnergyHandler
+public class PartUniversalCable extends PartTransmitter<EnergyAcceptorWrapper, EnergyNetwork> implements IStrictEnergyAcceptor, IEnergyHandler
 {
 	public Tier.CableTier tier;
 
-	public static TransmitterIcons cableIcons = new TransmitterIcons(4, 1);
+	public static TransmitterIcons cableIcons = new TransmitterIcons(4, 8);
 
 	public double currentPower = 0;
-
-	public double cacheEnergy = 0;
 	public double lastWrite = 0;
 
-	public double drawAmount = 100;
+	public EnergyStack buffer = new EnergyStack(0);
 
 	public PartUniversalCable(Tier.CableTier cableTier)
 	{
+		super();
 		tier = cableTier;
 	}
 
@@ -58,92 +56,104 @@ public class PartUniversalCable extends PartTransmitter<EnergyNetwork> implement
 	{
 		if(world().isRemote)
 		{
-			double targetPower = getTransmitterNetwork().clientEnergyScale;
+			double targetPower = getTransmitter().hasTransmitterNetwork() ? getTransmitter().getTransmitterNetwork().clientEnergyScale : 0;
 
 			if(Math.abs(currentPower - targetPower) > 0.01)
 			{
-				currentPower = (9*currentPower + targetPower)/10;
+				currentPower = (9 * currentPower + targetPower) / 10;
 			}
-		}
+		} 
 		else {
-			if(getTransmitterNetwork(false) != null && getTransmitterNetwork(false).getSize() > 0)
+			updateShare();
+
+			List<ForgeDirection> sides = getConnections(ConnectionType.PULL);
+
+			if(!sides.isEmpty())
 			{
-				double last = lastWrite;
+				TileEntity[] connectedOutputters = CableUtils.getConnectedOutputters(tile());
+				double canDraw = tier.cableCapacity/10F;
 
-				if(last != getSaveShare())
+				for(ForgeDirection side : sides)
 				{
-					MekanismUtils.saveChunk(tile());
-				}
-			}
-
-			if(cacheEnergy > 0)
-			{
-				getTransmitterNetwork().electricityStored += cacheEnergy;
-				cacheEnergy = 0;
-			}
-
-				List<ForgeDirection> sides = getConnections(ConnectionType.PULL);
-				if(!sides.isEmpty())
-				{
-					TileEntity[] connectedOutputters = CableUtils.getConnectedOutputters(tile());
-
-					for(ForgeDirection side : sides)
+					if(connectedOutputters[side.ordinal()] != null)
 					{
-						if(connectedOutputters[side.ordinal()] != null)
+						TileEntity outputter = connectedOutputters[side.ordinal()];
+
+						if(outputter instanceof ICableOutputter && outputter instanceof IStrictEnergyStorage)
 						{
-							TileEntity outputter = connectedOutputters[side.ordinal()];
-
-							if(outputter instanceof ICableOutputter && outputter instanceof IStrictEnergyStorage)
+							if(((ICableOutputter)outputter).canOutputTo(side.getOpposite()))
 							{
-								if(((ICableOutputter)outputter).canOutputTo(side.getOpposite()))
-								{
-									double received = Math.min(((IStrictEnergyStorage)outputter).getEnergy(), drawAmount);
-									double toDraw = received;
-
-									if(received > 0)
-									{
-										toDraw -= getTransmitterNetwork().emit(received, true);
-									}
-									((IStrictEnergyStorage)outputter).setEnergy(((IStrictEnergyStorage)outputter).getEnergy() - toDraw);
-								}
-							}
-							else if(MekanismUtils.useRF() && outputter instanceof IEnergyProvider)
-							{
-								double received = ((IEnergyProvider)outputter).extractEnergy(side.getOpposite(), (int)drawAmount, true) * Mekanism.FROM_TE;
+								double received = Math.min(((IStrictEnergyStorage)outputter).getEnergy(), canDraw);
 								double toDraw = received;
 
 								if(received > 0)
 								{
-									toDraw -= getTransmitterNetwork().emit(received, true);
+									toDraw -= takeEnergy(received, true);
 								}
-								((IEnergyProvider)outputter).extractEnergy(side.getOpposite(), (int)toDraw, false);
+								
+								((IStrictEnergyStorage)outputter).setEnergy(((IStrictEnergyStorage)outputter).getEnergy() - toDraw);
 							}
-							else if(MekanismUtils.useIC2() && outputter instanceof IEnergySource)
-							{
-								double received = Math.min(((IEnergySource)outputter).getOfferedEnergy() * Mekanism.FROM_IC2, drawAmount);
-								double toDraw = received;
+						} 
+						else if(MekanismUtils.useRF() && outputter instanceof IEnergyProvider)
+						{
+							double received = ((IEnergyProvider)outputter).extractEnergy(side.getOpposite(), (int)(canDraw*general.TO_TE), true) * general.FROM_TE;
+							double toDraw = received;
 
-								if(received > 0)
-								{
-									toDraw -= getTransmitterNetwork().emit(received, true);
-								}
-								((IEnergySource)outputter).drawEnergy(toDraw * Mekanism.TO_IC2);
+							if(received > 0)
+							{
+								toDraw -= takeEnergy(received, true);
 							}
+
+							((IEnergyProvider)outputter).extractEnergy(side.getOpposite(), (int)(toDraw*general.TO_TE), false);
+						}
+						else if(MekanismUtils.useIC2() && outputter instanceof IEnergySource)
+						{
+							double received = Math.min(((IEnergySource)outputter).getOfferedEnergy() * general.FROM_IC2, canDraw);
+							double toDraw = received;
+
+							if(received > 0)
+							{
+								toDraw -= takeEnergy(received, true);
+							}
+
+							((IEnergySource)outputter).drawEnergy(toDraw * general.TO_IC2);
 						}
 					}
 				}
+			}
 		}
 
 		super.update();
 	}
 
+    @Override
+    public void updateShare()
+    {
+        if(getTransmitter().hasTransmitterNetwork() && getTransmitter().getTransmitterNetworkSize() > 0)
+        {
+            double last = getSaveShare();
+
+            if(last != lastWrite)
+            {
+                lastWrite = last;
+                MekanismUtils.saveChunk(tile());
+            }
+        }
+    }
+
 	private double getSaveShare()
 	{
-		return EnergyNetwork.round(getTransmitterNetwork().electricityStored*(1F/getTransmitterNetwork().transmitters.size()));
+		if(getTransmitter().hasTransmitterNetwork())
+		{
+			return EnergyNetwork.round(getTransmitter().getTransmitterNetwork().buffer.amount * (1F / getTransmitter().getTransmitterNetwork().transmitters.size()));
+		}
+		else {
+			return buffer.amount;
+		}
 	}
 
 	@Override
-	public TransmitterType getTransmitter()
+	public TransmitterType getTransmitterType()
 	{
 		return tier.type;
 	}
@@ -153,7 +163,8 @@ public class PartUniversalCable extends PartTransmitter<EnergyNetwork> implement
 	{
 		super.load(nbtTags);
 
-		cacheEnergy = nbtTags.getDouble("cacheEnergy");
+		buffer.amount = nbtTags.getDouble("cacheEnergy");
+		if(buffer.amount < 0) buffer.amount = 0;
 		tier = Tier.CableTier.values()[nbtTags.getInteger("tier")];
 	}
 
@@ -161,11 +172,7 @@ public class PartUniversalCable extends PartTransmitter<EnergyNetwork> implement
 	public void save(NBTTagCompound nbtTags)
 	{
 		super.save(nbtTags);
-
-		double toSave = getSaveShare();
-
-		lastWrite = toSave;
-		nbtTags.setDouble("cacheEnergy", toSave);
+		nbtTags.setDouble("cacheEnergy", lastWrite);
 		nbtTags.setInteger("tier", tier.ordinal());
 	}
 
@@ -177,28 +184,28 @@ public class PartUniversalCable extends PartTransmitter<EnergyNetwork> implement
 
 	public static void registerIcons(IIconRegister register)
 	{
-		cableIcons.registerCenterIcons(register, new String[] {"UniversalCableBasic", "UniversalCableAdvanced",
+		cableIcons.registerCenterIcons(register, new String[]{"UniversalCableBasic", "UniversalCableAdvanced",
 				"UniversalCableElite", "UniversalCableUltimate"});
-		cableIcons.registerSideIcons(register, new String[] {"TransmitterSideSmall"});
+		cableIcons.registerSideIcons(register, new String[] {"SmallTransmitterVerticalBasic", "SmallTransmitterVerticalAdvanced", "SmallTransmitterVerticalElite", "SmallTransmitterVerticalUltimate",
+				"SmallTransmitterHorizontalBasic", "SmallTransmitterHorizontalAdvanced", "SmallTransmitterHorizontalElite", "SmallTransmitterHorizontalUltimate"});
 	}
 
 	@Override
-	public void preSingleMerge(EnergyNetwork network)
-	{
-		network.electricityStored += cacheEnergy;
-		cacheEnergy = 0;
-	}
-
-	@Override
-	public IIcon getCenterIcon()
+	public IIcon getCenterIcon(boolean opaque)
 	{
 		return cableIcons.getCenterIcon(tier.ordinal());
 	}
 
 	@Override
-	public IIcon getSideIcon()
+	public IIcon getSideIcon(boolean opaque)
 	{
-		return cableIcons.getSideIcon(0);
+		return cableIcons.getSideIcon(tier.ordinal());
+	}
+
+	@Override
+	public IIcon getSideIconRotated(boolean opaque)
+	{
+		return cableIcons.getSideIcon(4+tier.ordinal());
 	}
 
 	@Override
@@ -208,13 +215,7 @@ public class PartUniversalCable extends PartTransmitter<EnergyNetwork> implement
 	}
 
 	@Override
-	public EnergyNetwork createNetworkFromSingleTransmitter(IGridTransmitter<EnergyNetwork> transmitter)
-	{
-		return new EnergyNetwork(transmitter);
-	}
-
-	@Override
-	public EnergyNetwork createNetworkByMergingSet(Set<EnergyNetwork> networks)
+	public EnergyNetwork createNetworkByMerging(Collection<EnergyNetwork> networks)
 	{
 		return new EnergyNetwork(networks);
 	}
@@ -229,84 +230,79 @@ public class PartUniversalCable extends PartTransmitter<EnergyNetwork> implement
 	@SideOnly(Side.CLIENT)
 	public void renderDynamic(Vector3 pos, float frame, int pass)
 	{
-		if(pass == 0 && MekanismClient.fancyUniversalCableRender)
+		if(pass == 0 && client.fancyUniversalCableRender)
 		{
 			RenderPartTransmitter.getInstance().renderContents(this, pos);
 		}
 	}
 
 	@Override
+	public EnergyNetwork createNewNetwork()
+	{
+		return new EnergyNetwork();
+	}
+
+	@Override
 	public void onChunkUnload()
 	{
-		if(!world().isRemote)
-		{
-			getTransmitterNetwork().electricityStored -= lastWrite;
-		}
-
+		takeShare();
 		super.onChunkUnload();
 	}
 
 	@Override
-	public int getTransmitterNetworkSize()
+	public Object getBuffer()
 	{
-		return getTransmitterNetwork().getSize();
+		return buffer;
 	}
 
 	@Override
-	public int getTransmitterNetworkAcceptorSize()
+	public void takeShare()
 	{
-		return getTransmitterNetwork().getAcceptorSize();
+		if(getTransmitter().hasTransmitterNetwork())
+		{
+			getTransmitter().getTransmitterNetwork().buffer.amount -= lastWrite;
+			buffer.amount = lastWrite;
+		}
 	}
 
 	@Override
-	public String getTransmitterNetworkNeeded()
-	{
-		return getTransmitterNetwork().getNeededInfo();
-	}
-
-	@Override
-	public String getTransmitterNetworkFlow()
-	{
-		return getTransmitterNetwork().getFlowInfo();
-	}
-
-	@Override
-	@Method(modid = "CoFHAPI|energy")
+	@Method(modid = "CoFHCore")
 	public int receiveEnergy(ForgeDirection from, int maxReceive, boolean simulate)
 	{
 		if(canReceiveEnergy(from))
 		{
-			return maxReceive - (int)Math.round(getTransmitterNetwork().emit(maxReceive * Mekanism.FROM_TE, !simulate) * Mekanism.TO_TE);
+			return maxReceive - (int)Math.round(takeEnergy(maxReceive * general.FROM_TE, !simulate) * general.TO_TE);
 		}
+
 		return 0;
 	}
 
 	@Override
-	@Method(modid = "CoFHAPI|energy")
+	@Method(modid = "CoFHCore")
 	public int extractEnergy(ForgeDirection from, int maxExtract, boolean simulate)
 	{
 		return 0;
 	}
 
 	@Override
-	@Method(modid = "CoFHAPI|energy")
+	@Method(modid = "CoFHCore")
 	public boolean canConnectEnergy(ForgeDirection from)
 	{
 		return canConnect(from);
 	}
 
 	@Override
-	@Method(modid = "CoFHAPI|energy")
+	@Method(modid = "CoFHCore")
 	public int getEnergyStored(ForgeDirection from)
 	{
 		return 0;
 	}
 
 	@Override
-	@Method(modid = "CoFHAPI|energy")
+	@Method(modid = "CoFHCore")
 	public int getMaxEnergyStored(ForgeDirection from)
 	{
-		return (int)Math.round(getTransmitterNetwork().getEnergyNeeded()*Mekanism.TO_TE);
+		return (int)Math.round(getTransmitter().getTransmitterNetwork().getEnergyNeeded() * general.TO_TE);
 	}
 
 	@Override
@@ -323,7 +319,7 @@ public class PartUniversalCable extends PartTransmitter<EnergyNetwork> implement
 			return 0;
 		}
 
-		double toUse = Math.min(getMaxEnergy()-getEnergy(), amount);
+		double toUse = Math.min(getMaxEnergy() - getEnergy(), amount);
 		setEnergy(getEnergy() + toUse);
 
 		return toUse;
@@ -338,18 +334,67 @@ public class PartUniversalCable extends PartTransmitter<EnergyNetwork> implement
 	@Override
 	public double getMaxEnergy()
 	{
-		return getTransmitterNetwork().getCapacity();
+		if(getTransmitter().hasTransmitterNetwork())
+		{
+			return getTransmitter().getTransmitterNetwork().getCapacity();
+		} else
+		{
+			return getCapacity();
+		}
 	}
 
 	@Override
 	public double getEnergy()
 	{
-		return getTransmitterNetwork().electricityStored;
+		if(getTransmitter().hasTransmitterNetwork())
+		{
+			return getTransmitter().getTransmitterNetwork().buffer.amount;
+		} 
+		else {
+			return buffer.amount;
+		}
 	}
 
 	@Override
 	public void setEnergy(double energy)
 	{
-		getTransmitterNetwork().electricityStored = energy;
+		if(getTransmitter().hasTransmitterNetwork())
+		{
+			getTransmitter().getTransmitterNetwork().buffer.amount = energy;
+		} 
+		else {
+			buffer.amount = energy;
+		}
+	}
+
+	public double takeEnergy(double energy, boolean doEmit)
+	{
+		if(getTransmitter().hasTransmitterNetwork())
+		{
+			return getTransmitter().getTransmitterNetwork().emit(energy, doEmit);
+		}
+		else {
+			double used = Math.min(getCapacity() - buffer.amount, energy);
+			
+			if(doEmit)
+			{
+				buffer.amount += used;
+			}
+			
+			return energy - used;
+		}
+	}
+
+	@Override
+	public EnergyAcceptorWrapper getCachedAcceptor(ForgeDirection side)
+	{
+		ConnectionType type = connectionTypes[side.ordinal()];
+
+		if(type == ConnectionType.PULL || type == ConnectionType.NONE)
+		{
+			return null;
+		}
+
+		return connectionMapContainsSide(currentAcceptorConnections, side) ? EnergyAcceptorWrapper.get(cachedAcceptors[side.ordinal()]) : null;
 	}
 }

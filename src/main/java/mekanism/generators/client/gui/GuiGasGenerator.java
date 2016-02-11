@@ -2,24 +2,24 @@ package mekanism.generators.client.gui;
 
 import java.util.List;
 
-import mekanism.api.ListUtils;
 import mekanism.api.gas.GasTank;
-import mekanism.client.gui.GuiEnergyInfo;
-import mekanism.client.gui.GuiEnergyInfo.IInfoHandler;
-import mekanism.client.gui.GuiGasGauge;
-import mekanism.client.gui.GuiGasGauge.IGasInfoHandler;
-import mekanism.client.gui.GuiGauge.Type;
+import mekanism.api.util.ListUtils;
 import mekanism.client.gui.GuiMekanism;
-import mekanism.client.gui.GuiPowerBar;
-import mekanism.client.gui.GuiRedstoneControl;
-import mekanism.client.gui.GuiSlot;
-import mekanism.client.gui.GuiSlot.SlotOverlay;
-import mekanism.client.gui.GuiSlot.SlotType;
+import mekanism.client.gui.element.GuiEnergyInfo;
+import mekanism.client.gui.element.GuiGasGauge;
+import mekanism.client.gui.element.GuiPowerBar;
+import mekanism.client.gui.element.GuiRedstoneControl;
+import mekanism.client.gui.element.GuiSlot;
+import mekanism.client.gui.element.GuiEnergyInfo.IInfoHandler;
+import mekanism.client.gui.element.GuiGasGauge.IGasInfoHandler;
+import mekanism.client.gui.element.GuiGauge.Type;
+import mekanism.client.gui.element.GuiSlot.SlotOverlay;
+import mekanism.client.gui.element.GuiSlot.SlotType;
+import mekanism.common.util.LangUtils;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.MekanismUtils.ResourceType;
 import mekanism.generators.common.inventory.container.ContainerGasGenerator;
 import mekanism.generators.common.tile.TileEntityGasGenerator;
-
 import net.minecraft.entity.player.InventoryPlayer;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
@@ -41,9 +41,9 @@ public class GuiGasGenerator extends GuiMekanism
 			public List<String> getInfo()
 			{
 				return ListUtils.asList(
-						"Producing: " + MekanismUtils.getEnergyDisplay(tileEntity.generationRate) + "/t",
-						"Storing: " + MekanismUtils.getEnergyDisplay(tileEntity.getEnergy()),
-						"Max Output: " + MekanismUtils.getEnergyDisplay(tileEntity.getMaxOutput()) + "/t");
+						LangUtils.localize("gui.producing") + ": " + MekanismUtils.getEnergyDisplay(tileEntity.generationRate) + "/t",
+						LangUtils.localize("gui.storing") + ": " + MekanismUtils.getEnergyDisplay(tileEntity.getEnergy()),
+						LangUtils.localize("gui.maxOutput") + ": " + MekanismUtils.getEnergyDisplay(tileEntity.getMaxOutput()) + "/t");
 			}
 		}, this, MekanismUtils.getResource(ResourceType.GUI, "GuiGasGenerator.png")));
 		guiElements.add(new GuiGasGauge(new IGasInfoHandler() {
@@ -64,7 +64,7 @@ public class GuiGasGenerator extends GuiMekanism
 		super.drawGuiContainerForegroundLayer(mouseX, mouseY);
 
 		fontRendererObj.drawString(tileEntity.getInventoryName(), (xSize/2)-(fontRendererObj.getStringWidth(tileEntity.getInventoryName())/2), 6, 0x404040);
-		fontRendererObj.drawString(MekanismUtils.localize("container.inventory"), 8, (ySize - 96) + 2, 0x404040);
+		fontRendererObj.drawString(LangUtils.localize("container.inventory"), 8, (ySize - 96) + 2, 0x404040);
 	}
 
 	@Override

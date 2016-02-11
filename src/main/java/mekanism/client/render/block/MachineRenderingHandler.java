@@ -11,6 +11,8 @@ import mekanism.client.model.ModelDigitalMiner;
 import mekanism.client.model.ModelElectricPump;
 import mekanism.client.model.ModelElectrolyticSeparator;
 import mekanism.client.model.ModelFluidicPlenisher;
+import mekanism.client.model.ModelLaser;
+import mekanism.client.model.ModelLaserAmplifier;
 import mekanism.client.model.ModelLogisticalSorter;
 import mekanism.client.model.ModelMetallurgicInfuser;
 import mekanism.client.model.ModelPressurizedReactionChamber;
@@ -18,18 +20,23 @@ import mekanism.client.model.ModelRotaryCondensentrator;
 import mekanism.client.model.ModelSeismicVibrator;
 import mekanism.client.render.MekanismRenderer;
 import mekanism.common.block.BlockMachine.MachineType;
+import mekanism.common.tile.TileEntityBasicBlock;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.MekanismUtils.ResourceType;
-
 import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderBlocks;
+import net.minecraft.tileentity.TileEntity;
+import net.minecraft.util.ResourceLocation;
 import net.minecraft.world.IBlockAccess;
+import net.minecraftforge.client.model.AdvancedModelLoader;
+import net.minecraftforge.client.model.IModelCustom;
+
+import org.lwjgl.opengl.GL11;
+
 import cpw.mods.fml.client.registry.ISimpleBlockRenderingHandler;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
-
-import org.lwjgl.opengl.GL11;
 
 @SideOnly(Side.CLIENT)
 public class MachineRenderingHandler implements ISimpleBlockRenderingHandler
@@ -49,6 +56,10 @@ public class MachineRenderingHandler implements ISimpleBlockRenderingHandler
 	public ModelSeismicVibrator seismicVibrator = new ModelSeismicVibrator();
 	public ModelPressurizedReactionChamber pressurizedReactionChamber = new ModelPressurizedReactionChamber();
 	public ModelFluidicPlenisher fluidicPlenisher = new ModelFluidicPlenisher();
+	public ModelLaser laser = new ModelLaser();
+	public ModelLaserAmplifier laserAmplifier = new ModelLaserAmplifier();
+	
+	public IModelCustom solarNeutronActivator = AdvancedModelLoader.loadModel(new ResourceLocation("mekanism:models/solar_tri.obj"));
 
 	@Override
 	public void renderInventoryBlock(Block block, int metadata, int modelID, RenderBlocks renderer)
@@ -183,7 +194,40 @@ public class MachineRenderingHandler implements ISimpleBlockRenderingHandler
 			Minecraft.getMinecraft().renderEngine.bindTexture(MekanismUtils.getResource(ResourceType.RENDER, "FluidicPlenisher.png"));
 			fluidicPlenisher.render(0.0560F);
 		}
+		else if(type == MachineType.LASER)
+		{
+			GL11.glRotatef(180F, 0.0F, 0.0F, 1.0F);
+			GL11.glRotatef(90F, 0.0F, -1.0F, 0.0F);
+			GL11.glTranslatef(0.0F, -0.85F, 0.0F);
+			Minecraft.getMinecraft().renderEngine.bindTexture(MekanismUtils.getResource(ResourceType.RENDER, "Laser.png"));
+			laser.render(0.0560F);
+		}
+		else if(type == MachineType.LASER_AMPLIFIER)
+		{
+			GL11.glRotatef(180F, 0.0F, 0.0F, 1.0F);
+			GL11.glRotatef(90F, 0.0F, -1.0F, 0.0F);
+			GL11.glTranslatef(0.0F, -0.85F, 0.0F);
+			Minecraft.getMinecraft().renderEngine.bindTexture(MekanismUtils.getResource(ResourceType.RENDER, "LaserAmplifier.png"));
+			laserAmplifier.render(0.0560F);
+		}
+		else if(type == MachineType.LASER_TRACTOR_BEAM)
+		{
+			GL11.glRotatef(180F, 0.0F, 0.0F, 1.0F);
+			GL11.glRotatef(90F, 0.0F, -1.0F, 0.0F);
+			GL11.glTranslatef(0.0F, -0.85F, 0.0F);
+			Minecraft.getMinecraft().renderEngine.bindTexture(MekanismUtils.getResource(ResourceType.RENDER, "LaserTractorBeam.png"));
+			laserAmplifier.render(0.0560F);
+		}
+		else if(type == MachineType.SOLAR_NEUTRON_ACTIVATOR)
+		{
+			GL11.glRotatef(180F, 0.0F, 1.0F, 0.0F);
+			GL11.glScalef(0.45F, 0.45F, 0.45F);
+			GL11.glTranslatef(0.0F, -1.3F, 0.0F);
+			Minecraft.getMinecraft().renderEngine.bindTexture(MekanismUtils.getResource(ResourceType.RENDER, "SolarNeutronActivator.png"));
+			solarNeutronActivator.renderAll();
+		}
 		else {
+			GL11.glRotatef(180F, 0.0F, 1.0F, 0.0F);
 			MekanismRenderer.renderItem(renderer, metadata, block);
 		}
 
@@ -193,18 +237,7 @@ public class MachineRenderingHandler implements ISimpleBlockRenderingHandler
 	@Override
 	public boolean renderWorldBlock(IBlockAccess world, int x, int y, int z, Block block, int modelId, RenderBlocks renderer)
 	{
-		int metadata = world.getBlockMetadata(x, y, z);
-
-		if(MachineType.get(block, metadata) != null)
-		{
-			if(!MachineType.get(block, metadata).hasModel)
-			{
-				renderer.renderStandardBlock(block, x, y, z);
-				renderer.setRenderBoundsFromBlock(block);
-				return true;
-			}
-		}
-
+		//Handled by CTMRenderingHandler
 		return false;
 	}
 

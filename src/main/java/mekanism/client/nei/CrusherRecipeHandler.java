@@ -1,18 +1,19 @@
 package mekanism.client.nei;
 
-import java.util.Set;
+import java.util.Collection;
 
 import mekanism.client.gui.GuiCrusher;
-import mekanism.client.gui.GuiProgress.ProgressBar;
+import mekanism.client.gui.element.GuiProgress.ProgressBar;
 import mekanism.common.recipe.RecipeHandler.Recipe;
-import mekanism.common.util.MekanismUtils;
+import mekanism.common.recipe.machines.CrusherRecipe;
+import mekanism.common.util.LangUtils;
 
 public class CrusherRecipeHandler extends MachineRecipeHandler
 {
 	@Override
 	public String getRecipeName()
 	{
-		return MekanismUtils.localize("tile.MachineBlock.Crusher.name");
+		return LangUtils.localize("tile.MachineBlock.Crusher.name");
 	}
 
 	@Override
@@ -34,9 +35,9 @@ public class CrusherRecipeHandler extends MachineRecipeHandler
 	}
 
 	@Override
-	public Set getRecipes()
+	public Collection<CrusherRecipe> getRecipes()
 	{
-		return Recipe.CRUSHER.get().entrySet();
+		return Recipe.CRUSHER.get().values();
 	}
 
 	@Override

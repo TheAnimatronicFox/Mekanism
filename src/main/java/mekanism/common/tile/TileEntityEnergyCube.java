@@ -1,35 +1,26 @@
 package mekanism.common.tile;
 
-import java.util.ArrayList;
-import java.util.EnumSet;
-
+import io.netty.buffer.ByteBuf;
 import mekanism.api.Coord4D;
 import mekanism.api.Range4D;
-import mekanism.common.IRedstoneControl;
 import mekanism.common.Mekanism;
-import mekanism.common.PacketHandler;
 import mekanism.common.Tier.EnergyCubeTier;
+import mekanism.common.base.IRedstoneControl;
+import mekanism.common.integration.IComputerIntegration;
 import mekanism.common.network.PacketTileEntity.TileEntityMessage;
 import mekanism.common.util.CableUtils;
 import mekanism.common.util.ChargeUtils;
+import mekanism.common.util.LangUtils;
 import mekanism.common.util.MekanismUtils;
-
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.MathHelper;
 import net.minecraftforge.common.util.ForgeDirection;
-import cpw.mods.fml.common.Optional.Interface;
-import cpw.mods.fml.common.Optional.Method;
 
-import io.netty.buffer.ByteBuf;
+import java.util.ArrayList;
+import java.util.EnumSet;
 
-import dan200.computercraft.api.lua.ILuaContext;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.peripheral.IComputerAccess;
-import dan200.computercraft.api.peripheral.IPeripheral;
-
-@Interface(iface = "dan200.computercraft.api.peripheral.IPeripheral", modid = "ComputerCraft")
-public class TileEntityEnergyCube extends TileEntityElectricBlock implements IPeripheral, IRedstoneControl
+public class TileEntityEnergyCube extends TileEntityElectricBlock implements IComputerIntegration, IRedstoneControl
 {
 	/** This Energy Cube's tier. */
 	public EnergyCubeTier tier = EnergyCubeTier.BASIC;
@@ -82,13 +73,13 @@ public class TileEntityEnergyCube extends TileEntityElectricBlock implements IPe
 	@Override
 	public String getInventoryName()
 	{
-		return MekanismUtils.localize(getBlockType().getUnlocalizedName() + "." + tier.name + ".name");
+		return LangUtils.localize("tile.EnergyCube" + tier.getBaseTier().getName() + ".name");
 	}
 
 	@Override
 	public double getMaxOutput()
 	{
-		return tier.OUTPUT;
+		return tier.output;
 	}
 
 	@Override
@@ -107,11 +98,10 @@ public class TileEntityEnergyCube extends TileEntityElectricBlock implements IPe
 	}
 
 	@Override
-	protected EnumSet<ForgeDirection> getConsumingSides()
+	public EnumSet<ForgeDirection> getConsumingSides()
 	{
 		EnumSet set = EnumSet.allOf(ForgeDirection.class);
 		set.removeAll(getOutputtingSides());
-		set.remove(ForgeDirection.UNKNOWN);
 
 		return set;
 	}
@@ -131,7 +121,7 @@ public class TileEntityEnergyCube extends TileEntityElectricBlock implements IPe
 	@Override
 	public double getMaxEnergy()
 	{
-		return tier.MAX_ELECTRICITY;
+		return tier.maxEnergy;
 	}
 
 	@Override
@@ -155,59 +145,36 @@ public class TileEntityEnergyCube extends TileEntityElectricBlock implements IPe
 		return false;
 	}
 
+    private static final String[] methods = new String[] {"getStored", "getOutput", "getMaxEnergy", "getEnergyNeeded"};
+
 	@Override
-	@Method(modid = "ComputerCraft")
-	public String getType()
+	public String[] getMethods()
 	{
-		return getInventoryName();
+		return methods;
 	}
 
 	@Override
-	@Method(modid = "ComputerCraft")
-	public String[] getMethodNames()
-	{
-		return new String[] {"getStored", "getOutput", "getMaxEnergy", "getEnergyNeeded"};
-	}
-
-	@Override
-	@Method(modid = "ComputerCraft")
-	public Object[] callMethod(IComputerAccess computer, ILuaContext context, int method, Object[] arguments) throws LuaException, InterruptedException
+	public Object[] invoke(int method, Object[] arguments) throws Exception
 	{
 		switch(method)
 		{
 			case 0:
 				return new Object[] {getEnergy()};
 			case 1:
-				return new Object[] {tier.OUTPUT};
+				return new Object[] {tier.output};
 			case 2:
 				return new Object[] {getMaxEnergy()};
 			case 3:
 				return new Object[] {(getMaxEnergy()-getEnergy())};
 			default:
-				Mekanism.logger.error("Attempted to call unknown method with computer ID " + computer.getID());
-				return null;
+				throw new NoSuchMethodException();
 		}
 	}
 
 	@Override
-	@Method(modid = "ComputerCraft")
-	public boolean equals(IPeripheral other)
-	{
-		return this == other;
-	}
-
-	@Override
-	@Method(modid = "ComputerCraft")
-	public void attach(IComputerAccess computer) {}
-
-	@Override
-	@Method(modid = "ComputerCraft")
-	public void detach(IComputerAccess computer) {}
-
-	@Override
 	public void handlePacketData(ByteBuf dataStream)
 	{
-		tier = EnergyCubeTier.getFromName(PacketHandler.readString(dataStream));
+		tier = EnergyCubeTier.values()[dataStream.readInt()];
 
 		super.handlePacketData(dataStream);
 
@@ -219,7 +186,7 @@ public class TileEntityEnergyCube extends TileEntityElectricBlock implements IPe
 	@Override
 	public ArrayList getNetworkedData(ArrayList data)
 	{
-		data.add(tier.name);
+		data.add(tier.ordinal());
 
 		super.getNetworkedData(data);
 
@@ -242,13 +209,18 @@ public class TileEntityEnergyCube extends TileEntityElectricBlock implements IPe
 	{
 		super.writeToNBT(nbtTags);
 
-		nbtTags.setString("tier", tier.name);
+		nbtTags.setString("tier", tier.getBaseTier().getName());
 		nbtTags.setInteger("controlType", controlType.ordinal());
 	}
 
 	@Override
 	public void setEnergy(double energy)
 	{
+		if(tier == EnergyCubeTier.CREATIVE && energy != Integer.MAX_VALUE)
+		{
+			return;
+		}
+		
 		super.setEnergy(energy);
 
 		int newRedstoneLevel = getRedstoneLevel();
@@ -276,5 +248,11 @@ public class TileEntityEnergyCube extends TileEntityElectricBlock implements IPe
 	public void setControlType(RedstoneControl type)
 	{
 		controlType = type;
+	}
+
+	@Override
+	public boolean canPulse()
+	{
+		return false;
 	}
 }

@@ -3,6 +3,7 @@ package mekanism.common.block;
 import java.util.Random;
 
 import mekanism.common.Mekanism;
+import mekanism.common.MekanismBlocks;
 import mekanism.common.item.ItemBlockCardboardBox;
 import mekanism.common.tile.TileEntityCardboardBox;
 
@@ -70,7 +71,7 @@ public class BlockCardboardBox extends BlockContainer
 	{
 		if(!world.isRemote && entityplayer.isSneaking())
 		{
-			ItemStack itemStack = new ItemStack(Mekanism.CardboardBox);
+			ItemStack itemStack = new ItemStack(MekanismBlocks.CardboardBox);
 			TileEntityCardboardBox tileEntity = (TileEntityCardboardBox)world.getTileEntity(x, y, z);
 
 			if(tileEntity.storedData != null)
@@ -128,7 +129,7 @@ public class BlockCardboardBox extends BlockContainer
 
 	public ItemStack dismantleBlock(World world, int x, int y, int z, boolean returnBlock)
 	{
-		ItemStack itemStack = getPickBlock(null, world, x, y, z);
+		ItemStack itemStack = getPickBlock(null, world, x, y, z, null);
 
 		world.setBlockToAir(x, y, z);
 
@@ -148,11 +149,11 @@ public class BlockCardboardBox extends BlockContainer
 	}
 
 	@Override
-	public ItemStack getPickBlock(MovingObjectPosition target, World world, int x, int y, int z)
+    public ItemStack getPickBlock(MovingObjectPosition target, World world, int x, int y, int z, EntityPlayer player)
 	{
 		TileEntityCardboardBox tileEntity = (TileEntityCardboardBox)world.getTileEntity(x, y, z);
 
-		ItemStack itemStack = new ItemStack(Mekanism.CardboardBox, 1, world.getBlockMetadata(x, y, z));
+		ItemStack itemStack = new ItemStack(MekanismBlocks.CardboardBox, 1, world.getBlockMetadata(x, y, z));
 
 		if(itemStack.getItemDamage() == 1)
 		{
@@ -175,7 +176,7 @@ public class BlockCardboardBox extends BlockContainer
 			double motionY = (world.rand.nextFloat() * motion) + (1.0F - motion) * 0.5D;
 			double motionZ = (world.rand.nextFloat() * motion) + (1.0F - motion) * 0.5D;
 
-			EntityItem entityItem = new EntityItem(world, x + motionX, y + motionY, z + motionZ, getPickBlock(null, world, x, y, z));
+			EntityItem entityItem = new EntityItem(world, x + motionX, y + motionY, z + motionZ, getPickBlock(null, world, x, y, z, player));
 
 			world.spawnEntityInWorld(entityItem);
 		}

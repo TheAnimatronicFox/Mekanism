@@ -3,6 +3,7 @@ package mekanism.common.item;
 import java.util.List;
 
 import mekanism.api.EnumColor;
+import mekanism.api.MekanismConfig.general;
 import mekanism.api.gas.Gas;
 import mekanism.api.gas.GasRegistry;
 import mekanism.api.gas.GasStack;
@@ -10,8 +11,7 @@ import mekanism.api.gas.IGasItem;
 import mekanism.client.render.ModelCustomArmor;
 import mekanism.client.render.ModelCustomArmor.ArmorModel;
 import mekanism.common.Mekanism;
-import mekanism.common.util.MekanismUtils;
-
+import mekanism.common.util.LangUtils;
 import net.minecraft.client.model.ModelBiped;
 import net.minecraft.client.renderer.texture.IIconRegister;
 import net.minecraft.creativetab.CreativeTabs;
@@ -28,7 +28,6 @@ import cpw.mods.fml.relauncher.SideOnly;
 
 public class ItemScubaTank extends ItemArmor implements IGasItem
 {
-	public int MAX_GAS = 24000;
 	public int TRANSFER_RATE = 16;
 
 	public ItemScubaTank()
@@ -46,13 +45,13 @@ public class ItemScubaTank extends ItemArmor implements IGasItem
 
 		if(gasStack == null)
 		{
-			list.add(MekanismUtils.localize("tooltip.noGas") + ".");
+			list.add(LangUtils.localize("tooltip.noGas") + ".");
 		}
 		else {
-			list.add(MekanismUtils.localize("tooltip.stored") + " " + gasStack.getGas().getLocalizedName() + ": " + gasStack.amount);
+			list.add(LangUtils.localize("tooltip.stored") + " " + gasStack.getGas().getLocalizedName() + ": " + gasStack.amount);
 		}
 
-		list.add(EnumColor.GREY + MekanismUtils.localize("tooltip.flowing") + ": " + (getFlowing(itemstack) ? EnumColor.DARK_GREEN : EnumColor.DARK_RED) + getFlowingStr(itemstack));
+		list.add(EnumColor.GREY + LangUtils.localize("tooltip.flowing") + ": " + (getFlowing(itemstack) ? EnumColor.DARK_GREEN : EnumColor.DARK_RED) + getFlowingStr(itemstack));
 	}
 
 	@Override
@@ -76,15 +75,30 @@ public class ItemScubaTank extends ItemArmor implements IGasItem
 		return model;
 	}
 
-	public void useGas(ItemStack stack)
+	public void useGas(ItemStack itemstack)
 	{
-		setGas(stack, new GasStack(getGas(stack).getGas(), getGas(stack).amount-1));
+		setGas(itemstack, new GasStack(getGas(itemstack).getGas(), getGas(itemstack).amount-1));
+	}
+	
+	public GasStack useGas(ItemStack itemstack, int amount)
+	{
+		if(getGas(itemstack) == null)
+		{
+			return null;
+		}
+
+		Gas type = getGas(itemstack).getGas();
+
+		int gasToUse = Math.min(getStored(itemstack), Math.min(getRate(itemstack), amount));
+		setGas(itemstack, new GasStack(type, getStored(itemstack)-gasToUse));
+
+		return new GasStack(type, gasToUse);
 	}
 
 	@Override
 	public int getMaxGas(ItemStack itemstack)
 	{
-		return MAX_GAS;
+		return general.maxScubaGas;
 	}
 
 	@Override
@@ -115,17 +129,7 @@ public class ItemScubaTank extends ItemArmor implements IGasItem
 	@Override
 	public GasStack removeGas(ItemStack itemstack, int amount)
 	{
-		if(getGas(itemstack) == null)
-		{
-			return null;
-		}
-
-		Gas type = getGas(itemstack).getGas();
-
-		int gasToUse = Math.min(getStored(itemstack), Math.min(getRate(itemstack), amount));
-		setGas(itemstack, new GasStack(type, getStored(itemstack)-gasToUse));
-
-		return new GasStack(type, gasToUse);
+		return null;
 	}
 
 	public int getStored(ItemStack itemstack)
@@ -152,7 +156,7 @@ public class ItemScubaTank extends ItemArmor implements IGasItem
 	{
 		boolean flowing = getFlowing(stack);
 		
-		return MekanismUtils.localize("tooltip." + (flowing ? "yes" : "no"));
+		return LangUtils.localize("tooltip." + (flowing ? "yes" : "no"));
 	}
 
 	public void setFlowing(ItemStack stack, boolean flowing)

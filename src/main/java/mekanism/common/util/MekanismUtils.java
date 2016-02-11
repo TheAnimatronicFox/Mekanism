@@ -1,50 +1,35 @@
 package mekanism.common.util;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.List;
-
+import buildcraft.api.tools.IToolWrench;
+import cofh.api.item.IToolHammer;
+import cpw.mods.fml.common.ModContainer;
+import cpw.mods.fml.common.registry.GameData;
+import ic2.api.energy.EnergyNet;
 import mekanism.api.Chunk3D;
 import mekanism.api.Coord4D;
 import mekanism.api.EnumColor;
 import mekanism.api.IMekWrench;
+import mekanism.api.MekanismConfig.client;
+import mekanism.api.MekanismConfig.general;
 import mekanism.api.gas.Gas;
 import mekanism.api.gas.GasStack;
-import mekanism.common.EnergyDisplay;
-import mekanism.common.EnergyDisplay.ElectricUnit;
-import mekanism.common.IActiveState;
-import mekanism.common.IFactory;
-import mekanism.common.IFactory.RecipeType;
-import mekanism.common.IInvConfiguration;
-import mekanism.common.IModule;
-import mekanism.common.IRedstoneControl;
-import mekanism.common.IRedstoneControl.RedstoneControl;
-import mekanism.common.IUpgradeManagement;
-import mekanism.common.Mekanism;
-import mekanism.common.OreDictCache;
-import mekanism.common.Teleporter;
-import mekanism.common.Tier.EnergyCubeTier;
-import mekanism.common.Tier.FactoryTier;
-import mekanism.common.Version;
+import mekanism.api.transmitters.TransmissionType;
+import mekanism.api.util.UnitDisplayUtils;
+import mekanism.api.util.UnitDisplayUtils.ElectricUnit;
+import mekanism.api.util.UnitDisplayUtils.TemperatureUnit;
+import mekanism.common.*;
+import mekanism.common.Tier.*;
+import mekanism.common.base.*;
+import mekanism.common.base.IFactory.RecipeType;
 import mekanism.common.inventory.container.ContainerElectricChest;
+import mekanism.common.item.ItemBlockBasic;
 import mekanism.common.item.ItemBlockEnergyCube;
 import mekanism.common.item.ItemBlockGasTank;
 import mekanism.common.network.PacketElectricChest.ElectricChestMessage;
 import mekanism.common.network.PacketElectricChest.ElectricChestPacketType;
-import mekanism.common.tank.DynamicTankCache;
 import mekanism.common.tile.TileEntityAdvancedBoundingBlock;
 import mekanism.common.tile.TileEntityBoundingBlock;
-import mekanism.common.tile.TileEntityDynamicTank;
 import mekanism.common.tile.TileEntityElectricChest;
-
 import net.minecraft.block.Block;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
@@ -59,25 +44,23 @@ import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.MovingObjectPosition;
 import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.StatCollector;
 import net.minecraft.util.Vec3;
 import net.minecraft.world.EnumSkyBlock;
 import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
 import net.minecraftforge.common.util.ForgeDirection;
-import net.minecraftforge.fluids.Fluid;
-import net.minecraftforge.fluids.FluidContainerRegistry;
-import net.minecraftforge.fluids.FluidRegistry;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fluids.IFluidBlock;
+import net.minecraftforge.fluids.*;
 import net.minecraftforge.oredict.OreDictionary;
 import net.minecraftforge.oredict.ShapedOreRecipe;
-import cpw.mods.fml.common.ModAPIManager;
-import cpw.mods.fml.common.ModContainer;
-import cpw.mods.fml.common.registry.GameData;
 
-import buildcraft.api.tools.IToolWrench;
-import ic2.api.energy.EnergyNet;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.*;
 
 /**
  * Utilities used by Mekanism. All miscellaneous methods are located here.
@@ -88,13 +71,15 @@ public final class MekanismUtils
 {
 	public static final ForgeDirection[] SIDE_DIRS = new ForgeDirection[] {ForgeDirection.NORTH, ForgeDirection.SOUTH, ForgeDirection.WEST, ForgeDirection.EAST};
 
+	public static final Map<String, Class<?>> classesFound = new HashMap<String, Class<?>>();
+
 	/**
 	 * Checks for a new version of Mekanism.
 	 */
 	public static boolean checkForUpdates(EntityPlayer entityplayer)
 	{
 		try {
-			if(Mekanism.updateNotifications && Mekanism.latestVersionNumber != null && Mekanism.recentNews != null)
+			if(general.updateNotifications && Mekanism.latestVersionNumber != null && Mekanism.recentNews != null)
 			{
 				if(!Mekanism.latestVersionNumber.equals("null"))
 				{
@@ -111,7 +96,7 @@ public final class MekanismUtils
 					if(Version.get(Mekanism.latestVersionNumber).comparedState(Mekanism.versionNumber) == 1 || !list.isEmpty())
 					{
 						entityplayer.addChatMessage(new ChatComponentText(EnumColor.GREY + "------------- " + EnumColor.DARK_BLUE + "[Mekanism]" + EnumColor.GREY + " -------------"));
-						entityplayer.addChatMessage(new ChatComponentText(EnumColor.GREY + " " + MekanismUtils.localize("update.outdated") + "."));
+						entityplayer.addChatMessage(new ChatComponentText(EnumColor.GREY + " " + LangUtils.localize("update.outdated") + "."));
 
 						if(Version.get(Mekanism.latestVersionNumber).comparedState(Mekanism.versionNumber) == 1)
 						{
@@ -123,15 +108,15 @@ public final class MekanismUtils
 							entityplayer.addChatMessage(new ChatComponentText(EnumColor.INDIGO + " Mekanism" + module.getName() + ": " + EnumColor.DARK_RED + module.getVersion()));
 						}
 
-						entityplayer.addChatMessage(new ChatComponentText(EnumColor.GREY + " " + MekanismUtils.localize("update.consider") + " " + EnumColor.DARK_GREY + Mekanism.latestVersionNumber));
-						entityplayer.addChatMessage(new ChatComponentText(EnumColor.GREY + " " + MekanismUtils.localize("update.newFeatures") + ": " + EnumColor.INDIGO + Mekanism.recentNews));
-						entityplayer.addChatMessage(new ChatComponentText(EnumColor.GREY + " " + MekanismUtils.localize("update.visit") + " " + EnumColor.DARK_GREY + "aidancbrady.com/mekanism" + EnumColor.GREY + " " + MekanismUtils.localize("update.toDownload") + "."));
+						entityplayer.addChatMessage(new ChatComponentText(EnumColor.GREY + " " + LangUtils.localize("update.consider") + " " + EnumColor.DARK_GREY + Mekanism.latestVersionNumber));
+						entityplayer.addChatMessage(new ChatComponentText(EnumColor.GREY + " " + LangUtils.localize("update.newFeatures") + ": " + EnumColor.INDIGO + Mekanism.recentNews));
+						entityplayer.addChatMessage(new ChatComponentText(EnumColor.GREY + " " + LangUtils.localize("update.visit") + " " + EnumColor.DARK_GREY + "aidancbrady.com/mekanism" + EnumColor.GREY + " " + LangUtils.localize("update.toDownload") + "."));
 						entityplayer.addChatMessage(new ChatComponentText(EnumColor.GREY + "------------- " + EnumColor.DARK_BLUE + "[=======]" + EnumColor.GREY + " -------------"));
 						return true;
 					}
 					else if(Version.get(Mekanism.latestVersionNumber).comparedState(Mekanism.versionNumber) == -1)
 					{
-						entityplayer.addChatMessage(new ChatComponentText(EnumColor.DARK_BLUE + "[Mekanism] " + EnumColor.GREY + MekanismUtils.localize("update.devBuild") + " " + EnumColor.DARK_GREY + Mekanism.versionNumber));
+						entityplayer.addChatMessage(new ChatComponentText(EnumColor.DARK_BLUE + "[Mekanism] " + EnumColor.GREY + LangUtils.localize("update.devBuild") + " " + EnumColor.DARK_GREY + Mekanism.versionNumber));
 						return true;
 					}
 				}
@@ -150,8 +135,8 @@ public final class MekanismUtils
 	 */
 	public static String getLatestVersion()
 	{
-		String[] text = merge(getHTML("http://dl.dropbox.com/u/90411166/Mod%20Versions/Mekanism.txt")).split(":");
-		if(!text[0].contains("UTF-8") && !text[0].contains("HTML") && !text[0].contains("http")) return text[0];
+		String[] text = merge(getHTML("https://dl.dropbox.com/u/90411166/Mod%20Versions/Mekanism.txt")).split(":");
+		if(text.length > 1 && !text[0].contains("UTF-8") && !text[0].contains("HTML") && !text[0].contains("http")) return text[0];
 		return "null";
 	}
 
@@ -161,7 +146,7 @@ public final class MekanismUtils
 	 */
 	public static String getRecentNews()
 	{
-		String[] text = merge(getHTML("http://dl.dropbox.com/u/90411166/Mod%20Versions/Mekanism.txt")).split(":");
+		String[] text = merge(getHTML("https://dl.dropbox.com/u/90411166/Mod%20Versions/Mekanism.txt")).split(":");
 		if(text.length > 1 && !text[1].contains("UTF-8") && !text[1].contains("HTML") && !text[1].contains("http")) return text[1];
 		return "null";
 	}
@@ -173,7 +158,7 @@ public final class MekanismUtils
 	{
 		Mekanism.donators.clear();
 
-		for(String s : getHTML("http://dl.dropbox.com/u/90411166/Donators/Mekanism.txt"))
+		for(String s : getHTML("https://dl.dropbox.com/u/90411166/Donators/Mekanism.txt"))
 		{
 			Mekanism.donators.add(s);
 		}
@@ -226,59 +211,6 @@ public final class MekanismUtils
 	}
 
 	/**
-	 * Returns the closest teleporter between a selection of one or two.
-	 */
-	public static Coord4D getClosestCoords(Teleporter.Code teleCode, EntityPlayer player)
-	{
-		if(Mekanism.teleporters.get(teleCode).size() == 1)
-		{
-			return Mekanism.teleporters.get(teleCode).get(0);
-		}
-		else {
-			int dimensionId = player.worldObj.provider.dimensionId;
-
-			Coord4D coords0 = Mekanism.teleporters.get(teleCode).get(0);
-			Coord4D coords1 = Mekanism.teleporters.get(teleCode).get(1);
-
-			int distance0 = (int)player.getDistance(coords0.xCoord, coords0.yCoord, coords0.zCoord);
-			int distance1 = (int)player.getDistance(coords1.xCoord, coords1.yCoord, coords1.zCoord);
-
-			if(dimensionId == coords0.dimensionId && dimensionId != coords1.dimensionId)
-			{
-				return coords0;
-			}
-			else if(dimensionId == coords1.dimensionId && dimensionId != coords0.dimensionId)
-			{
-				return coords1;
-			}
-			else if(dimensionId == coords0.dimensionId && dimensionId == coords1.dimensionId)
-			{
-				if(distance0 < distance1)
-				{
-					return coords0;
-				}
-				else if(distance0 > distance1)
-				{
-					return coords1;
-				}
-			}
-			else if(dimensionId != coords0.dimensionId && dimensionId != coords1.dimensionId)
-			{
-				if(distance0 < distance1)
-				{
-					return coords0;
-				}
-				else if(distance0 > distance1)
-				{
-					return coords1;
-				}
-			}
-		}
-
-		return null;
-	}
-
-	/**
 	 * Checks if the mod doesn't need an update.
 	 * @return if mod doesn't need an update
 	 */
@@ -314,8 +246,7 @@ public final class MekanismUtils
 		try {
 			new URL("http://www.apple.com").openConnection().connect();
 			return true;
-		} catch (IOException e)
-		{
+		} catch (IOException e) {
 			return false;
 		}
 	}
@@ -370,12 +301,41 @@ public final class MekanismUtils
 	/**
 	 * Retrieves an empty Energy Cube with a defined tier.
 	 * @param tier - tier to add to the Energy Cube
-	 * @return empty energy cube with defined tier
+	 * @return empty Energy Cube with defined tier
 	 */
 	public static ItemStack getEnergyCube(EnergyCubeTier tier)
 	{
-		ItemStack itemstack = ((ItemBlockEnergyCube)new ItemStack(Mekanism.EnergyCube).getItem()).getUnchargedItem(tier);
-		return itemstack;
+		return ((ItemBlockEnergyCube)new ItemStack(MekanismBlocks.EnergyCube).getItem()).getUnchargedItem(tier);
+	}
+	
+	/**
+	 * Returns a Control Circuit with a defined tier, using an OreDict value if enabled in the config.
+	 * @param tier - tier to add to the Control Circuit
+	 * @return Control Circuit with defined tier
+	 */
+	public static Object getControlCircuit(BaseTier tier)
+	{
+		return general.controlCircuitOreDict ? "circuit" + tier.getName() : new ItemStack(MekanismItems.ControlCircuit, 1, tier.ordinal());
+	}
+	
+	/**
+	 * Retrieves an empty Induction Cell with a defined tier.
+	 * @param tier - tier to add to the Induction Cell
+	 * @return empty Induction Cell with defined tier
+	 */
+	public static ItemStack getInductionCell(InductionCellTier tier)
+	{
+		return ((ItemBlockBasic)new ItemStack(MekanismBlocks.BasicBlock2, 1, 3).getItem()).getUnchargedCell(tier);
+	}
+	
+	/**
+	 * Retrieves an Induction Provider with a defined tier.
+	 * @param tier - tier to add to the Induction Provider
+	 * @return Induction Provider with defined tier
+	 */
+	public static ItemStack getInductionProvider(InductionProviderTier tier)
+	{
+		return ((ItemBlockBasic)new ItemStack(MekanismBlocks.BasicBlock2, 1, 4).getItem()).getUnchargedProvider(tier);
 	}
 
 	/**
@@ -384,7 +344,7 @@ public final class MekanismUtils
 	 */
 	public static ItemStack getEmptyGasTank()
 	{
-		ItemStack itemstack = ((ItemBlockGasTank)new ItemStack(Mekanism.GasTank).getItem()).getEmptyItem();
+		ItemStack itemstack = ((ItemBlockGasTank)new ItemStack(MekanismBlocks.GasTank).getItem()).getEmptyItem();
 		return itemstack;
 	}
 
@@ -396,7 +356,7 @@ public final class MekanismUtils
 	 */
 	public static ItemStack getFactory(FactoryTier tier, RecipeType type)
 	{
-		ItemStack itemstack = new ItemStack(Mekanism.MachineBlock, 1, 5+tier.ordinal());
+		ItemStack itemstack = new ItemStack(MekanismBlocks.MachineBlock, 1, 5+tier.ordinal());
 		((IFactory)itemstack.getItem()).setRecipeType(type.ordinal(), itemstack);
 		return itemstack;
 	}
@@ -544,86 +504,90 @@ public final class MekanismUtils
 	}
 
 	/**
-	 * Localizes the defined string.
-	 * @param s - string to localized
-	 * @return localized string
-	 */
-	public static String localize(String s)
-	{
-		return StatCollector.translateToLocal(s);
-	}
-
-	/**
 	 * Increments the output type of a machine's side.
 	 * @param config - configurable machine
+	 * @param type - the TransmissionType to modify
 	 * @param side - side to increment output of
 	 */
-	public static void incrementOutput(IInvConfiguration config, int side)
+	public static void incrementOutput(ISideConfiguration config, TransmissionType type, int side)
 	{
-		int max = config.getSideData().size()-1;
-		int current = config.getSideData().indexOf(config.getSideData().get(config.getConfiguration()[side]));
+		int max = config.getConfig().getOutputs(type).size()-1;
+		int current = config.getConfig().getOutputs(type).indexOf(config.getConfig().getOutputs(type).get(config.getConfig().getConfig(type)[side]));
 
 		if(current < max)
 		{
-			config.getConfiguration()[side] = (byte)(current+1);
+			config.getConfig().getConfig(type)[side] = (byte)(current+1);
 		}
 		else if(current == max)
 		{
-			config.getConfiguration()[side] = 0;
+			config.getConfig().getConfig(type)[side] = 0;
 		}
 
 		TileEntity tile = (TileEntity)config;
-		Coord4D coord = Coord4D.get(tile).getFromSide(ForgeDirection.getOrientation(MekanismUtils.getBaseOrientation(side, config.getOrientation())));
 
-		tile.getWorldObj().notifyBlockOfNeighborChange(coord.xCoord, coord.yCoord, coord.zCoord, tile.getBlockType());
+		tile.markDirty();
 	}
 
 	/**
 	 * Decrements the output type of a machine's side.
 	 * @param config - configurable machine
+	 * @param type - the TransmissionType to modify
 	 * @param side - side to increment output of
 	 */
-	public static void decrementOutput(IInvConfiguration config, int side)
+	public static void decrementOutput(ISideConfiguration config, TransmissionType type, int side)
 	{
-		int max = config.getSideData().size()-1;
-		int current = config.getSideData().indexOf(config.getSideData().get(config.getConfiguration()[side]));
+		int max = config.getConfig().getOutputs(type).size()-1;
+		int current = config.getConfig().getOutputs(type).indexOf(config.getConfig().getOutputs(type).get(config.getConfig().getConfig(type)[side]));
 
 		if(current > 0)
 		{
-			config.getConfiguration()[side] = (byte)(current-1);
+			config.getConfig().getConfig(type)[side] = (byte)(current-1);
 		}
 		else if(current == 0)
 		{
-			config.getConfiguration()[side] = (byte)max;
+			config.getConfig().getConfig(type)[side] = (byte)max;
 		}
 
 		TileEntity tile = (TileEntity)config;
-		Coord4D coord = Coord4D.get(tile).getFromSide(ForgeDirection.getOrientation(MekanismUtils.getBaseOrientation(side, config.getOrientation())));
+		tile.markDirty();
+	}
 
-		tile.getWorldObj().notifyBlockOfNeighborChange(coord.xCoord, coord.yCoord, coord.zCoord, tile.getBlockType());
+	public static float fractionUpgrades(IUpgradeTile mgmt, Upgrade type)
+	{
+		return (float)mgmt.getComponent().getUpgrades(type)/(float)type.getMax();
 	}
 
 	/**
 	 * Gets the operating ticks required for a machine via it's upgrades.
-	 * @param speedUpgrade - number of speed upgrades
+	 * @param mgmt - tile containing upgrades
 	 * @param def - the original, default ticks required
-	 * @return max operating ticks
+	 * @return required operating ticks
 	 */
-	public static int getTicks(IUpgradeManagement mgmt, int def)
+	public static int getTicks(IUpgradeTile mgmt, int def)
 	{
-		return (int)(def * Math.pow(Mekanism.maxUpgradeMultiplier, -mgmt.getSpeedMultiplier()/8.0));
+		return (int)(def * Math.pow(general.maxUpgradeMultiplier, -fractionUpgrades(mgmt, Upgrade.SPEED)));
 	}
 
 	/**
 	 * Gets the energy required per tick for a machine via it's upgrades.
-	 * @param speedUpgrade - number of speed upgrades
-	 * @param energyUpgrade - number of energy upgrades
+	 * @param mgmt - tile containing upgrades
 	 * @param def - the original, default energy required
-	 * @return max energy per tick
+	 * @return required energy per tick
 	 */
-	public static double getEnergyPerTick(IUpgradeManagement mgmt, double def)
+	public static double getEnergyPerTick(IUpgradeTile mgmt, double def)
 	{
-		return def * Math.pow(Mekanism.maxUpgradeMultiplier, (2*mgmt.getSpeedMultiplier()-mgmt.getEnergyMultiplier())/8.0);
+		return def * Math.pow(general.maxUpgradeMultiplier, 2*fractionUpgrades(mgmt, Upgrade.SPEED)-fractionUpgrades(mgmt, Upgrade.ENERGY));
+	}
+	
+	/**
+	 * Gets the energy required per tick for a machine via it's upgrades, not taking into account speed upgrades.
+	 * @param mgmt - tile containing upgrades
+	 * @param def - the original, default energy required
+	 * @return required energy per tick
+	 */
+	public static double getBaseEnergyPerTick(IUpgradeTile mgmt, double def)
+	{
+		return def * Math.pow(general.maxUpgradeMultiplier, -fractionUpgrades(mgmt, Upgrade.ENERGY));
 	}
 
 	/**
@@ -632,52 +596,47 @@ public final class MekanismUtils
 	 * @param def - the original, default secondary energy required
 	 * @return max secondary energy per tick
 	 */
-	public static double getSecondaryEnergyPerTickMean(IUpgradeManagement mgmt, int def)
+	public static double getSecondaryEnergyPerTickMean(IUpgradeTile mgmt, int def)
 	{
-		return (def * Math.pow(Mekanism.maxUpgradeMultiplier, (mgmt.getSpeedMultiplier()-mgmt.getEnergyMultiplier())/8.0));
+		if(mgmt.getComponent().supports(Upgrade.GAS))
+		{
+			return def * Math.pow(general.maxUpgradeMultiplier, 2 * fractionUpgrades(mgmt, Upgrade.SPEED) - fractionUpgrades(mgmt, Upgrade.GAS));
+		}
+
+		return def * Math.pow(general.maxUpgradeMultiplier, fractionUpgrades(mgmt, Upgrade.SPEED));
 	}
 
 	/**
 	 * Gets the maximum energy for a machine via it's upgrades.
-	 * @param energyUpgrade - number of energy upgrades
+	 * @param mgmt - tile containing upgrades - best known for "Kids", 2008
 	 * @param def - original, default max energy
 	 * @return max energy
 	 */
-	public static double getMaxEnergy(IUpgradeManagement mgmt, double def)
+	public static double getMaxEnergy(IUpgradeTile mgmt, double def)
 	{
-		return def * Math.pow(Mekanism.maxUpgradeMultiplier, mgmt.getEnergyMultiplier()/8.0);
+		return def * Math.pow(general.maxUpgradeMultiplier, fractionUpgrades(mgmt, Upgrade.ENERGY));
 	}
 	
 	/**
 	 * Gets the maximum energy for a machine's item form via it's upgrades.
-	 * @param energyUpgrade - number of energy upgrades
+	 * @param itemStack - stack holding energy upgrades
 	 * @param def - original, default max energy
 	 * @return max energy
 	 */
-	public static double getMaxEnergy(ItemStack itemStack, IUpgradeManagement mgmt, double def)
+	public static double getMaxEnergy(ItemStack itemStack, double def)
 	{
-		return def * Math.pow(Mekanism.maxUpgradeMultiplier, mgmt.getEnergyMultiplier(itemStack)/8.0);
+		Map<Upgrade, Integer> upgrades = Upgrade.buildMap(itemStack.stackTagCompound);
+		float numUpgrades =  upgrades.get(Upgrade.ENERGY) == null ? 0 : (float)upgrades.get(Upgrade.ENERGY);
+		return def * Math.pow(general.maxUpgradeMultiplier, numUpgrades/(float)Upgrade.ENERGY.getMax());
 	}
 	
 	/**
-	 * A better "isBlockIndirectlyGettingPowered()" that doesn't load chunks.
+	 * Better version of the World.isBlockIndirectlyGettingPowered() method that doesn't load chunks.
 	 * @param world - the world to perform the check in
 	 * @param coord - the coordinate of the block performing the check
 	 * @return if the block is indirectly getting powered by LOADED chunks
 	 */
 	public static boolean isGettingPowered(World world, Coord4D coord)
-	{
-		return isGettingPowered(world, coord, true);
-	}
-	
-	/**
-	 * Extension of preceding isGettingPowered() method, used to define expansions of the check.
-	 * @param world - the world to perform the check in
-	 * @param coord - the coordinate of the block performing the check
-	 * @param expand - whether or not the check should be recursively called on the surrounding coordinates
-	 * @return if the block is indirectly getting powered by LOADED chunks
-	 */
-	public static boolean isGettingPowered(World world, Coord4D coord, boolean expand)
 	{
 		for(ForgeDirection side : ForgeDirection.VALID_DIRECTIONS)
 		{
@@ -685,11 +644,38 @@ public final class MekanismUtils
 			
 			if(sideCoord.exists(world) && sideCoord.getFromSide(side).exists(world))
 			{
-				if(world.isBlockProvidingPowerTo(sideCoord.xCoord, sideCoord.yCoord, sideCoord.zCoord, side.getOpposite().ordinal()) > 0)
+				Block block = sideCoord.getBlock(world);
+				boolean weakPower = block.shouldCheckWeakPower(world, coord.xCoord, coord.yCoord, coord.zCoord, side.ordinal());
+				
+				if(weakPower && isDirectlyGettingPowered(world, sideCoord))
 				{
 					return true;
 				}
-				else if(expand && isGettingPowered(world, sideCoord, false))
+				else if(!weakPower && block.isProvidingWeakPower(world, sideCoord.xCoord, sideCoord.yCoord, sideCoord.zCoord, side.ordinal()) > 0)
+				{
+					return true;
+				}
+			}
+		}
+		
+		return false;
+	}
+	
+	/**
+	 * Checks if a block is directly getting powered by any of its neighbors without loading any chunks.
+	 * @param world - the world to perform the check in
+	 * @param coord - the Coord4D of the block to check
+	 * @return if the block is directly getting powered
+	 */
+	public static boolean isDirectlyGettingPowered(World world, Coord4D coord)
+	{
+		for(ForgeDirection side : ForgeDirection.VALID_DIRECTIONS)
+		{
+			Coord4D sideCoord = coord.getFromSide(side);
+			
+			if(sideCoord.exists(world))
+			{
+				if(world.isBlockProvidingPowerTo(coord.xCoord, coord.yCoord, coord.zCoord, side.ordinal()) > 0)
 				{
 					return true;
 				}
@@ -700,92 +686,124 @@ public final class MekanismUtils
 	}
 
 	/**
+	 * Notifies neighboring blocks of a TileEntity change without loading chunks.
+	 * @param world - world to perform the operation in
+	 * @param coord - Coord4D to perform the operation on
+	 */
+	public static void notifyLoadedNeighborsOfTileChange(World world, Coord4D coord)
+	{
+		for(ForgeDirection dir : ForgeDirection.VALID_DIRECTIONS)
+		{
+			Coord4D offset = coord.getFromSide(dir);
+
+			if(offset.exists(world))
+			{
+				Block block1 = offset.getBlock(world);
+				block1.onNeighborChange(world, offset.xCoord, offset.yCoord, offset.zCoord, coord.xCoord, coord.yCoord, coord.zCoord);
+				
+				if(block1.isNormalCube(world, offset.xCoord, offset.yCoord, offset.zCoord))
+				{
+					offset = offset.getFromSide(dir);
+					
+					if(offset.exists(world))
+					{
+						block1 = offset.getBlock(world);
+
+						if(block1.getWeakChanges(world, offset.xCoord, offset.yCoord, offset.zCoord))
+						{
+							block1.onNeighborChange(world, offset.xCoord, offset.yCoord, offset.zCoord, coord.xCoord, coord.yCoord, coord.zCoord);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	/**
 	 * Places a fake bounding block at the defined location.
 	 * @param world - world to place block in
-	 * @param x - x coordinate
-	 * @param y - y coordinate
-	 * @param z - z coordinate
+	 * @param boundingLocation - coordinates of bounding block
 	 * @param orig - original block
 	 */
-	public static void makeBoundingBlock(World world, int x, int y, int z, Coord4D orig)
+	public static void makeBoundingBlock(World world, Coord4D boundingLocation, Coord4D orig)
 	{
-		world.setBlock(x, y, z, Mekanism.BoundingBlock);
+		world.setBlock(boundingLocation.xCoord, boundingLocation.yCoord, boundingLocation.zCoord, MekanismBlocks.BoundingBlock);
 
 		if(!world.isRemote)
 		{
-			((TileEntityBoundingBlock)world.getTileEntity(x, y, z)).setMainLocation(orig.xCoord, orig.yCoord, orig.zCoord);
+			((TileEntityBoundingBlock)boundingLocation.getTileEntity(world)).setMainLocation(orig.xCoord, orig.yCoord, orig.zCoord);
 		}
 	}
 
 	/**
 	 * Places a fake advanced bounding block at the defined location.
 	 * @param world - world to place block in
-	 * @param x - x coordinate
-	 * @param y - y coordinate
-	 * @param z - z coordinate
+	 * @param boundingLocation - coordinates of bounding block
 	 * @param orig - original block
 	 */
-	public static void makeAdvancedBoundingBlock(World world, int x, int y, int z, Coord4D orig)
+	public static void makeAdvancedBoundingBlock(World world, Coord4D boundingLocation, Coord4D orig)
 	{
-		world.setBlock(x, y, z, Mekanism.BoundingBlock, 1, 0);
+		world.setBlock(boundingLocation.xCoord, boundingLocation.yCoord, boundingLocation.zCoord, MekanismBlocks.BoundingBlock, 1, 0);
 
 		if(!world.isRemote)
 		{
-			((TileEntityAdvancedBoundingBlock)world.getTileEntity(x, y, z)).setMainLocation(orig.xCoord, orig.yCoord, orig.zCoord);
+			((TileEntityAdvancedBoundingBlock)boundingLocation.getTileEntity(world)).setMainLocation(orig.xCoord, orig.yCoord, orig.zCoord);
 		}
 	}
 
 	/**
 	 * Updates a block's light value and marks it for a render update.
 	 * @param world - world the block is in
-	 * @param x - x coord
-	 * @param y - y coord
-	 * @param z - z coord
+	 * @param x - x coordinate
+	 * @param y - y coordinate
+	 * @param z - z coordinate
 	 */
 	public static void updateBlock(World world, int x, int y, int z)
 	{
-		if(!(world.getTileEntity(x, y, z) instanceof IActiveState) || ((IActiveState)world.getTileEntity(x, y, z)).renderUpdate())
+		Coord4D pos = new Coord4D(x, y, z);
+		if(!(pos.getTileEntity(world) instanceof IActiveState) || ((IActiveState)pos.getTileEntity(world)).renderUpdate())
 		{
-			world.func_147479_m(x, y, z);
+			world.func_147479_m(pos.xCoord, pos.yCoord, pos.zCoord);
 		}
 
-		if(!(world.getTileEntity(x, y, z) instanceof IActiveState) || ((IActiveState)world.getTileEntity(x, y, z)).lightUpdate() && Mekanism.machineEffects)
+		if(!(pos.getTileEntity(world) instanceof IActiveState) || ((IActiveState)pos.getTileEntity(world)).lightUpdate() && client.machineEffects)
 		{
-			updateAllLightTypes(world, x, y, z);
+			updateAllLightTypes(world, pos);
 		}
 	}
 	
-	public static void updateAllLightTypes(World world, int x, int y, int z)
+	/**
+	 * Updates all light types at the given coordinates.
+	 * @param world - the world to perform the lighting update in
+	 * @param pos - coordinates of the block to update
+	 */
+	public static void updateAllLightTypes(World world, Coord4D pos)
 	{
-		world.updateLightByType(EnumSkyBlock.Block, x, y, z);
-		world.updateLightByType(EnumSkyBlock.Sky, x, y, z);
+		world.updateLightByType(EnumSkyBlock.Block, pos.xCoord, pos.yCoord, pos.zCoord);
+		world.updateLightByType(EnumSkyBlock.Sky, pos.xCoord, pos.yCoord, pos.zCoord);
 	}
 
 	/**
 	 * Whether or not a certain block is considered a fluid.
 	 * @param world - world the block is in
-	 * @param x - x coordinate
-	 * @param y - y coordinate
-	 * @param z - z coordinate
+	 * @param pos - coordinates
 	 * @return if the block is a fluid
 	 */
-	public static boolean isFluid(World world, int x, int y, int z)
+	public static boolean isFluid(World world, Coord4D pos)
 	{
-		return getFluid(world, x, y, z) != null;
+		return getFluid(world, pos, false) != null;
 	}
 
 	/**
 	 * Gets a fluid from a certain location.
 	 * @param world - world the block is in
-	 * @param x - x coordinate
-	 * @param y - y coordinate
-	 * @param z - z coordinate
+	 * @param pos - location of the block
 	 * @return the fluid at the certain location, null if it doesn't exist
 	 */
-	public static FluidStack getFluid(World world, int x, int y, int z)
+	public static FluidStack getFluid(World world, Coord4D pos, boolean filter)
 	{
-		Block block = world.getBlock(x, y, z);
-		int meta = world.getBlockMetadata(x, y, z);
+		Block block = pos.getBlock(world);
+		int meta = pos.getMetadata(world);
 
 		if(block == null)
 		{
@@ -794,7 +812,13 @@ public final class MekanismUtils
 
 		if((block == Blocks.water || block == Blocks.flowing_water) && meta == 0)
 		{
-			return new FluidStack(FluidRegistry.WATER, FluidContainerRegistry.BUCKET_VOLUME);
+			if(!filter)
+			{
+				return new FluidStack(FluidRegistry.WATER, FluidContainerRegistry.BUCKET_VOLUME);
+			}
+			else {
+				return new FluidStack(FluidRegistry.getFluid("heavywater"), 10);
+			}
 		}
 		else if((block == Blocks.lava || block == Blocks.flowing_lava) && meta == 0)
 		{
@@ -806,7 +830,7 @@ public final class MekanismUtils
 
 			if(meta == 0)
 			{
-				return fluid.drain(world, x, y, z, false);
+				return fluid.drain(world, pos.xCoord, pos.yCoord, pos.zCoord, false);
 			}
 		}
 
@@ -814,55 +838,15 @@ public final class MekanismUtils
 	}
 
 	/**
-	 * Gets the fluid ID at a certain location, 0 if there isn't one
-	 * @param world - world the block is in
-	 * @param x - x coordinate
-	 * @param y - y coordinate
-	 * @param z - z coordinate
-	 * @return fluid ID
-	 */
-	public static int getFluidId(World world, int x, int y, int z)
-	{
-		Block block = world.getBlock(x, y, z);
-		int meta = world.getBlockMetadata(x, y, z);
-
-		if(block == null)
-		{
-			return 0;
-		}
-
-		if(block == Blocks.water || block == Blocks.flowing_water)
-		{
-			return FluidRegistry.WATER.getID();
-		}
-		else if(block == Blocks.lava || block == Blocks.flowing_lava)
-		{
-			return FluidRegistry.LAVA.getID();
-		}
-
-		for(Fluid fluid : FluidRegistry.getRegisteredFluids().values())
-		{
-			if(fluid.getBlock() == block)
-			{
-				return fluid.getID();
-			}
-		}
-
-		return 0;
-	}
-
-	/**
 	 * Whether or not a block is a dead fluid.
 	 * @param world - world the block is in
-	 * @param x - x coordinate
-	 * @param y - y coordinate
-	 * @param z - z coordinate
+	 * @param pos - coordinates
 	 * @return if the block is a dead fluid
 	 */
-	public static boolean isDeadFluid(World world, int x, int y, int z)
+	public static boolean isDeadFluid(World world, Coord4D pos)
 	{
-		Block block = world.getBlock(x, y, z);
-		int meta = world.getBlockMetadata(x, y, z);
+		Block block = pos.getBlock(world);
+		int meta = pos.getMetadata(world);
 
 		if(block == null || meta == 0)
 		{
@@ -934,78 +918,6 @@ public final class MekanismUtils
 		player.openContainer = new ContainerElectricChest(player.inventory, tileEntity, inventory, isBlock);
 		player.openContainer.windowId = id;
 		player.openContainer.addCraftingToCrafters(player);
-	}
-
-	/**
-	 * Grabs an inventory from the world's caches, and removes all the world's references to it.
-	 * @param world - world the cache is stored in
-	 * @param id - inventory ID to pull
-	 * @return correct Dynamic Tank inventory cache
-	 */
-	public static DynamicTankCache pullInventory(World world, int id)
-	{
-		DynamicTankCache toReturn = Mekanism.dynamicInventories.get(id);
-
-		for(Coord4D obj : Mekanism.dynamicInventories.get(id).locations)
-		{
-			TileEntityDynamicTank tileEntity = (TileEntityDynamicTank)obj.getTileEntity(world);
-
-			if(tileEntity != null)
-			{
-				tileEntity.cachedData = new DynamicTankCache();
-				tileEntity.inventory = new ItemStack[2];
-				tileEntity.inventoryID = -1;
-			}
-		}
-
-		Mekanism.dynamicInventories.remove(id);
-
-		return toReturn;
-	}
-
-	/**
-	 * Updates a dynamic tank cache with the defined inventory ID with the parameterized values.
-	 * @param inventoryID - inventory ID of the dynamic tank
-	 * @param fluid - cached fluid of the dynamic tank
-	 * @param inventory - inventory of the dynamic tank
-	 * @param tileEntity - dynamic tank TileEntity
-	 */
-	public static void updateCache(int inventoryID, DynamicTankCache cache, TileEntityDynamicTank tileEntity)
-	{
-		if(!Mekanism.dynamicInventories.containsKey(inventoryID))
-		{
-			cache.locations.add(Coord4D.get(tileEntity));
-
-			Mekanism.dynamicInventories.put(inventoryID, cache);
-
-			return;
-		}
-
-		Mekanism.dynamicInventories.put(inventoryID, cache);
-		Mekanism.dynamicInventories.get(inventoryID).locations.add(Coord4D.get(tileEntity));
-	}
-
-	/**
-	 * Grabs a unique inventory ID for a dynamic tank.
-	 * @return unique inventory ID
-	 */
-	public static int getUniqueInventoryID()
-	{
-		int id = 0;
-
-		while(true)
-		{
-			for(Integer i : Mekanism.dynamicInventories.keySet())
-			{
-				if(id == i)
-				{
-					id++;
-					continue;
-				}
-			}
-
-			return id;
-		}
 	}
 
 	/**
@@ -1143,20 +1055,18 @@ public final class MekanismUtils
 			return true;
 		}
 
-		World world = tileEntity.getWorldObj();
 		IRedstoneControl control = (IRedstoneControl)tileEntity;
 
-		if(control.getControlType() == RedstoneControl.DISABLED)
+		switch(control.getControlType())
 		{
-			return true;
-		}
-		else if(control.getControlType() == RedstoneControl.HIGH)
-		{
-			return control.isPowered();
-		}
-		else if(control.getControlType() == RedstoneControl.LOW)
-		{
-			return !control.isPowered();
+			case DISABLED:
+				return true;
+			case HIGH:
+				return control.isPowered();
+			case LOW:
+				return !control.isPowered();
+			case PULSE:
+				return control.isPowered() && !control.wasPowered();
 		}
 
 		return false;
@@ -1208,39 +1118,89 @@ public final class MekanismUtils
 	 */
 	public static String getEnergyDisplay(double energy)
 	{
-		switch(Mekanism.activeType)
+		if(energy == Integer.MAX_VALUE)
+		{
+			return LangUtils.localize("gui.infinite");
+		}
+		
+		switch(general.activeType)
 		{
 			case J:
-				return EnergyDisplay.getDisplayShort(energy, ElectricUnit.JOULES);
+				return UnitDisplayUtils.getDisplayShort(energy, ElectricUnit.JOULES);
 			case RF:
-				return Math.round(energy*Mekanism.TO_TE) + " RF";
+				return UnitDisplayUtils.getDisplayShort(energy * general.TO_TE, ElectricUnit.REDSTONE_FLUX);
 			case EU:
-				return Math.round(energy*Mekanism.TO_IC2) + " EU";
+				return UnitDisplayUtils.getDisplayShort(energy * general.TO_IC2, ElectricUnit.ELECTRICAL_UNITS);
 			case MJ:
-				return (Math.round((energy*Mekanism.TO_TE)*10)/100) + " MJ";
+				return UnitDisplayUtils.getDisplayShort(energy * general.TO_TE / 10, ElectricUnit.MINECRAFT_JOULES);
 		}
 
 		return "error";
 	}
-
+	
 	/**
-	 * Gets a rounded power display of a defined amount of energy.
-	 * @param energy - energy to display
-	 * @return rounded power display
+	 * Convert from the unit defined in the configuration to joules.
+	 * @param energy - energy to convert
+	 * @return energy converted to joules
 	 */
-	public static String getPowerDisplay(double energy)
+	public static double convertToJoules(double energy)
 	{
-		return EnergyDisplay.getDisplayShort(energy, ElectricUnit.WATT);
+		switch(general.activeType)
+		{
+			case RF:
+				return energy * general.FROM_TE;
+			case EU:
+				return energy * general.FROM_IC2;
+			case MJ:
+				return energy * general.FROM_TE * 10;
+			default:
+				return energy;
+		}
+	}
+	
+	/**
+	 * Convert from joules to the unit defined in the configuration.
+	 * @param energy - energy to convert
+	 * @return energy converted to configured unit
+	 */
+	public static double convertToDisplay(double energy)
+	{
+		switch(general.activeType)
+		{
+			case RF:
+				return energy * general.TO_TE;
+			case EU:
+				return energy * general.TO_IC2;
+			case MJ:
+				return energy * general.TO_TE / 10;
+			default:
+				return energy;
+		}
 	}
 
 	/**
-	 * Whether or not BuildCraft power should be used, taking into account whether it is installed or another mod is
-	 * providing its API.
-	 * @return if BuildCraft power should be used
+	 * Gets a rounded energy display of a defined amount of energy.
+	 * @param T - temperature to display
+	 * @return rounded energy display
 	 */
-	public static boolean useBuildCraft()
+	public static String getTemperatureDisplay(double T, TemperatureUnit unit)
 	{
-		return Mekanism.hooks.BuildCraftPowerLoaded && !Mekanism.blacklistBC;
+		double TK = unit.convertToK(T);
+		switch(general.tempUnit)
+		{
+			case K:
+				return UnitDisplayUtils.getDisplayShort(TK, TemperatureUnit.KELVIN);
+			case C:
+				return UnitDisplayUtils.getDisplayShort(TK, TemperatureUnit.CELSIUS);
+			case R:
+				return UnitDisplayUtils.getDisplayShort(TK, TemperatureUnit.RANKINE);
+			case F:
+				return UnitDisplayUtils.getDisplayShort(TK, TemperatureUnit.FAHRENHEIT);
+			case STP:
+				return UnitDisplayUtils.getDisplayShort(TK, TemperatureUnit.AMBIENT);
+		}
+
+		return "error";
 	}
 
 	/**
@@ -1250,7 +1210,7 @@ public final class MekanismUtils
 	 */
 	public static boolean useIC2()
 	{
-		return Mekanism.hooks.IC2Loaded && EnergyNet.instance != null && !Mekanism.blacklistIC2;
+		return Mekanism.hooks.IC2Loaded && EnergyNet.instance != null && !general.blacklistIC2;
 	}
 
 	/**
@@ -1260,7 +1220,7 @@ public final class MekanismUtils
 	 */
 	public static boolean useRF()
 	{
-		return Mekanism.hooks.RedstoneFluxLoaded && !Mekanism.blacklistRF;
+		return Mekanism.hooks.CoFHCoreLoaded && !general.blacklistRF;
 	}
 
 	/**
@@ -1371,6 +1331,21 @@ public final class MekanismUtils
 		return false;
 	}
 	
+	/**
+	 * Whether or not a given EntityPlayer is considered an Op.
+	 * @param player - player to check
+	 * @return if the player has operator privileges
+	 */
+	public static boolean isOp(EntityPlayerMP player)
+	{
+		return general.opsBypassRestrictions && player.mcServer.getConfigurationManager().func_152596_g(player.getGameProfile());
+	}
+	
+	/**
+	 * Gets the mod ID of the mod owning the given ItemStack.
+	 * @param stack - ItemStack to check
+	 * @return mod ID of the ItemStack's owner
+	 */
 	public static String getMod(ItemStack stack)
 	{
 		try {
@@ -1381,6 +1356,11 @@ public final class MekanismUtils
 		}
 	}
 	
+	/**
+	 * Gets the item ID from a given ItemStack
+	 * @param itemStack - ItemStack to check
+	 * @return item ID of the ItemStack
+	 */
 	public static int getID(ItemStack itemStack)
 	{
 		if(itemStack == null)
@@ -1391,13 +1371,92 @@ public final class MekanismUtils
 		return Item.getIdFromItem(itemStack.getItem());
 	}
 
+	public static boolean classExists(String className)
+	{
+		if(classesFound.containsKey(className))
+		{
+			return classesFound.get(className) != null;
+		}
+
+		Class<?> found;
+
+		try
+		{
+			found = Class.forName(className);
+		}
+		catch(ClassNotFoundException e)
+		{
+			found = null;
+		}
+
+		classesFound.put(className, found);
+
+		return found != null;
+	}
+
+	public static boolean existsAndInstance(Object obj, String className)
+	{
+		Class<?> theClass;
+
+		if(classesFound.containsKey(className))
+		{
+			theClass = classesFound.get(className);
+		}
+		else {
+			try {
+				theClass = Class.forName(className);
+				classesFound.put(className, theClass);
+			} catch(ClassNotFoundException e) {
+				classesFound.put(className, null);
+				return false;
+			}
+		}
+
+		return theClass != null && theClass.isInstance(obj);
+	}
+
+	public static boolean isBCWrench(Item tool)
+	{
+		return existsAndInstance(tool, "buildcraft.api.tools.IToolWrench");
+	}
+
+	public static boolean isCoFHHammer(Item tool)
+	{
+		return existsAndInstance(tool, "cofh.api.item.IToolHammer");
+	}
+
+	/**
+	 * Whether or not the player has a usable wrench for a block at the coordinates given.
+	 * @param player - the player using the wrench
+	 * @param x - the x coordinate of the block being wrenched
+	 * @param y - the y coordinate of the block being wrenched
+	 * @param z - the z coordinate of the block being wrenched
+	 * @return if the player can use the wrench
+	 */
 	public static boolean hasUsableWrench(EntityPlayer player, int x, int y, int z)
 	{
 		ItemStack tool = player.getCurrentEquippedItem();
+		
+		if(tool == null)
+		{
+			return false;
+		}
+		
 		if(tool.getItem() instanceof IMekWrench && ((IMekWrench)tool.getItem()).canUseWrench(player, x, y, z))
+		{
 			return true;
-		if(ModAPIManager.INSTANCE.hasAPI("BuildCraftAPI|tools") && tool.getItem() instanceof IToolWrench && ((IToolWrench)tool.getItem()).canWrench(player, x, y, z))
+		}
+		
+		if(isBCWrench(tool.getItem()) && ((IToolWrench)tool.getItem()).canWrench(player, x, y, z))
+		{
 			return true;
+		}
+		
+		if(isCoFHHammer(tool.getItem()) && ((IToolHammer)tool.getItem()).isUsable(tool, player, x, y, z))
+		{
+			return true;
+		}
+		
 		return false;
 	}
 

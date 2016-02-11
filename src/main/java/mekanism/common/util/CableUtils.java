@@ -1,55 +1,30 @@
 package mekanism.common.util;
 
+import ic2.api.energy.EnergyNet;
+import ic2.api.energy.tile.IEnergyAcceptor;
+import ic2.api.energy.tile.IEnergySink;
+import ic2.api.energy.tile.IEnergySource;
+
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 
 import mekanism.api.Coord4D;
+import mekanism.api.MekanismConfig.general;
 import mekanism.api.energy.ICableOutputter;
 import mekanism.api.energy.IStrictEnergyAcceptor;
-import mekanism.api.transmitters.IGridTransmitter;
+import mekanism.api.transmitters.ITransmitterTile;
 import mekanism.api.transmitters.TransmissionType;
-import mekanism.common.Mekanism;
-import mekanism.common.tile.TileEntityElectricBlock;
-
+import mekanism.common.base.IEnergyWrapper;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraftforge.common.util.ForgeDirection;
-
 import cofh.api.energy.IEnergyConnection;
 import cofh.api.energy.IEnergyProvider;
 import cofh.api.energy.IEnergyReceiver;
-import ic2.api.energy.EnergyNet;
-import ic2.api.energy.tile.IEnergyAcceptor;
-import ic2.api.energy.tile.IEnergySink;
-import ic2.api.energy.tile.IEnergySource;
 
 public final class CableUtils
 {
-	private static Set<ForgeDirection> allSides = EnumSet.complementOf(EnumSet.of(ForgeDirection.UNKNOWN));
-
-	/**
-	 * Gets all the connected energy acceptors, whether IC2-based or BuildCraft-based, surrounding a specific tile entity.
-	 * @param tileEntity - center tile entity
-	 * @return TileEntity[] of connected acceptors
-	 */
-	public static TileEntity[] getConnectedEnergyAcceptors(TileEntity tileEntity)
-	{
-		TileEntity[] acceptors = new TileEntity[] {null, null, null, null, null, null};
-
-		for(ForgeDirection orientation : ForgeDirection.VALID_DIRECTIONS)
-		{
-			TileEntity acceptor = Coord4D.get(tileEntity).getFromSide(orientation).getTileEntity(tileEntity.getWorldObj());
-
-			if(isEnergyAcceptor(acceptor))
-			{
-				acceptors[orientation.ordinal()] = acceptor;
-			}
-		}
-
-		return acceptors;
-	}
-
 	public static boolean isEnergyAcceptor(TileEntity tileEntity)
 	{
 		return (tileEntity instanceof IStrictEnergyAcceptor ||
@@ -57,41 +32,13 @@ public final class CableUtils
 				(MekanismUtils.useRF() && tileEntity instanceof IEnergyReceiver));
 	}
 
-	/**
-	 * Gets all the connected cables around a specific tile entity.
-	 * @param tileEntity - center tile entity
-	 * @return TileEntity[] of connected cables
-	 */
-	public static TileEntity[] getConnectedCables(TileEntity tileEntity)
-	{
-		TileEntity[] cables = new TileEntity[] {null, null, null, null, null, null};
-
-		for(ForgeDirection orientation : ForgeDirection.VALID_DIRECTIONS)
-		{
-			TileEntity cable = Coord4D.get(tileEntity).getFromSide(orientation).getTileEntity(tileEntity.getWorldObj());
-
-			if(isCable(cable))
-			{
-				cables[orientation.ordinal()] = cable;
-			}
-		}
-
-		return cables;
-	}
-
 	public static boolean isCable(TileEntity tileEntity)
 	{
-		return TransmissionType.checkTransmissionType(tileEntity, TransmissionType.ENERGY);
-	}
-
-	/**
-	 * Gets all the adjacent connections to a TileEntity.
-	 * @param tileEntity - center TileEntity
-	 * @return boolean[] of adjacent connections
-	 */
-	public static boolean[] getConnections(TileEntity tileEntity)
-	{
-		return getConnections(tileEntity, allSides);
+		if(tileEntity instanceof ITransmitterTile)
+		{
+			return TransmissionType.checkTransmissionType(((ITransmitterTile)tileEntity).getTransmitter(), TransmissionType.ENERGY);
+		}
+		return false;
 	}
 
 	/**
@@ -124,9 +71,17 @@ public final class CableUtils
 	 */
 	public static boolean isValidAcceptorOnSide(TileEntity cableEntity, TileEntity tile, ForgeDirection side)
 	{
+		if(isCable(tile))
+		{
+			return false;
+		}
+
 		if(isEnergyAcceptor(tile) && isConnectable(cableEntity, tile, side))
+		{
 			return true;
-		return isOutputter(tile, side);
+		}
+		
+		return isOutputter(tile, side) || (MekanismUtils.useRF() && tile instanceof IEnergyConnection && ((IEnergyConnection)tile).canConnectEnergy(side.getOpposite()));
 	}
 
 	/**
@@ -158,27 +113,9 @@ public final class CableUtils
 				(MekanismUtils.useRF() && tileEntity instanceof IEnergyProvider && ((IEnergyConnection)tileEntity).canConnectEnergy(side.getOpposite()));
 	}
 
-	/**
-	 * Whether or not a cable can connect to a specific acceptor.
-	 * @param side - side to check
-	 * @param tile - cable TileEntity
-	 * @return whether or not the cable can connect to the specific side
-	 */
-	public static boolean canConnectToAcceptor(ForgeDirection side, TileEntity tile)
-	{
-		if(tile == null)
-		{
-			return false;
-		}
-
-		TileEntity tileEntity = Coord4D.get(tile).getFromSide(side).getTileEntity(tile.getWorldObj());
-
-		return isConnectable(tile, tileEntity, side);
-	}
-
 	public static boolean isConnectable(TileEntity orig, TileEntity tileEntity, ForgeDirection side)
 	{
-		if(tileEntity instanceof IGridTransmitter)
+		if(tileEntity instanceof ITransmitterTile)
 		{
 			return false;
 		}
@@ -215,16 +152,16 @@ public final class CableUtils
 		return false;
 	}
 
-	public static void emit(TileEntityElectricBlock emitter)
+	public static void emit(IEnergyWrapper emitter)
 	{
-		if(!emitter.getWorldObj().isRemote && MekanismUtils.canFunction(emitter))
+		if(!((TileEntity)emitter).getWorldObj().isRemote && MekanismUtils.canFunction((TileEntity)emitter))
 		{
 			double energyToSend = Math.min(emitter.getEnergy(), emitter.getMaxOutput());
 
 			if(energyToSend > 0)
 			{
 				List<ForgeDirection> outputtingSides = new ArrayList<ForgeDirection>();
-				boolean[] connectable = getConnections(emitter, emitter.getOutputtingSides());
+				boolean[] connectable = getConnections((TileEntity)emitter, emitter.getOutputtingSides());
 
 				for(ForgeDirection side : emitter.getOutputtingSides())
 				{
@@ -255,7 +192,7 @@ public final class CableUtils
 		}
 	}
 
-	private static double emit_do(TileEntityElectricBlock emitter, List<ForgeDirection> outputtingSides, double totalToSend, boolean tryAgain)
+	private static double emit_do(IEnergyWrapper emitter, List<ForgeDirection> outputtingSides, double totalToSend, boolean tryAgain)
 	{
 		double remains = totalToSend%outputtingSides.size();
 		double splitSend = (totalToSend-remains)/outputtingSides.size();
@@ -265,7 +202,7 @@ public final class CableUtils
 
 		for(ForgeDirection side : outputtingSides)
 		{
-			TileEntity tileEntity = Coord4D.get(emitter).getFromSide(side).getTileEntity(emitter.getWorldObj());
+			TileEntity tileEntity = Coord4D.get((TileEntity)emitter).getFromSide(side).getTileEntity(((TileEntity)emitter).getWorldObj());
 			double toSend = splitSend+remains;
 			remains = 0;
 
@@ -286,7 +223,7 @@ public final class CableUtils
 		return sent;
 	}
 
-	private static double emit_do_do(TileEntityElectricBlock from, TileEntity tileEntity, ForgeDirection side, double currentSending, boolean tryAgain)
+	private static double emit_do_do(IEnergyWrapper from, TileEntity tileEntity, ForgeDirection side, double currentSending, boolean tryAgain)
 	{
 		double sent = 0;
 
@@ -305,17 +242,17 @@ public final class CableUtils
 
 			if(handler.canConnectEnergy(side.getOpposite()))
 			{
-				int used = handler.receiveEnergy(side.getOpposite(), (int)Math.round(currentSending*Mekanism.TO_TE), false);
-				sent += used*Mekanism.FROM_TE;
+				int used = handler.receiveEnergy(side.getOpposite(), (int)Math.round(currentSending*general.TO_TE), false);
+				sent += used*general.FROM_TE;
 			}
 		}
 		else if(MekanismUtils.useIC2() && tileEntity instanceof IEnergySink)
 		{
-			if(((IEnergySink)tileEntity).acceptsEnergyFrom(from, side.getOpposite()))
+			if(((IEnergySink)tileEntity).acceptsEnergyFrom((TileEntity)from, side.getOpposite()))
 			{
-				double toSend = Math.min(currentSending, EnergyNet.instance.getPowerFromTier(((IEnergySink)tileEntity).getSinkTier())*Mekanism.FROM_IC2);
-				toSend = Math.min(toSend, ((IEnergySink)tileEntity).getDemandedEnergy()*Mekanism.FROM_IC2);
-				sent += (toSend - (((IEnergySink)tileEntity).injectEnergy(side.getOpposite(), toSend*Mekanism.TO_IC2, 0)*Mekanism.FROM_IC2));
+				double toSend = Math.min(currentSending, EnergyNet.instance.getPowerFromTier(((IEnergySink)tileEntity).getSinkTier())*general.FROM_IC2);
+				toSend = Math.min(toSend, ((IEnergySink)tileEntity).getDemandedEnergy()*general.FROM_IC2);
+				sent += (toSend - (((IEnergySink)tileEntity).injectEnergy(side.getOpposite(), toSend*general.TO_IC2, 0)*general.FROM_IC2));
 			}
 		}
 

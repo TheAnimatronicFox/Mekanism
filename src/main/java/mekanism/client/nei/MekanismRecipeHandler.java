@@ -6,17 +6,16 @@ import java.util.List;
 
 import mekanism.api.energy.IEnergizedItem;
 import mekanism.api.gas.IGasItem;
-import mekanism.common.IEnergyCube;
-import mekanism.common.IFactory;
+import mekanism.common.base.IEnergyCube;
+import mekanism.common.base.IFactory;
 import mekanism.common.block.BlockMachine.MachineType;
+import mekanism.common.item.ItemBlockBasic;
 import mekanism.common.recipe.MekanismRecipe;
-import mekanism.common.util.MekanismUtils;
-
+import mekanism.common.util.LangUtils;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.crafting.CraftingManager;
 import net.minecraft.item.crafting.IRecipe;
 import net.minecraftforge.oredict.OreDictionary;
-
 import codechicken.nei.PositionedStack;
 import codechicken.nei.recipe.ShapedRecipeHandler;
 
@@ -25,7 +24,7 @@ public class MekanismRecipeHandler extends ShapedRecipeHandler
 	@Override
 	public String getRecipeName()
 	{
-		return "Mekanism " + MekanismUtils.localize("recipe.mekanismShaped");
+		return "Mekanism " + LangUtils.localize("recipe.mekanismShaped");
 	}
 
 	@Override
@@ -136,6 +135,13 @@ public class MekanismRecipeHandler extends ShapedRecipeHandler
 			if(target.getItem() instanceof IEnergyCube && input.getItem() instanceof IEnergyCube)
 			{
 				if(((IEnergyCube)target.getItem()).getEnergyCubeTier(target) != ((IEnergyCube)input.getItem()).getEnergyCubeTier(input))
+				{
+					return false;
+				}
+			}
+			else if(target.getItem() instanceof ItemBlockBasic && input.getItem() instanceof ItemBlockBasic)
+			{
+				if(((ItemBlockBasic)target.getItem()).getTier(target) != ((ItemBlockBasic)input.getItem()).getTier(input))
 				{
 					return false;
 				}

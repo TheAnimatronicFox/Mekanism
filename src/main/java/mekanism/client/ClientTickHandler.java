@@ -1,56 +1,36 @@
 package mekanism.client;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import mekanism.api.EnumColor;
-import mekanism.api.IClientTicker;
-import mekanism.api.StackUtils;
-import mekanism.api.gas.GasStack;
-import mekanism.client.sound.GasMaskSound;
-import mekanism.client.sound.JetpackSound;
-import mekanism.client.sound.SoundHandler;
-import mekanism.common.KeySync;
-import mekanism.common.Mekanism;
-import mekanism.common.block.BlockMachine.MachineType;
-import mekanism.common.item.ItemBlockMachine;
-import mekanism.common.item.ItemConfigurator;
-import mekanism.common.item.ItemElectricBow;
-import mekanism.common.item.ItemFreeRunners;
-import mekanism.common.item.ItemGasMask;
-import mekanism.common.item.ItemJetpack;
-import mekanism.common.item.ItemJetpack.JetpackMode;
-import mekanism.common.item.ItemScubaTank;
-import mekanism.common.item.ItemWalkieTalkie;
-import mekanism.common.network.PacketConfiguratorState.ConfiguratorStateMessage;
-import mekanism.common.network.PacketElectricBowState.ElectricBowStateMessage;
-import mekanism.common.network.PacketJetpackData.JetpackDataMessage;
-import mekanism.common.network.PacketJetpackData.JetpackPacket;
-import mekanism.common.network.PacketPortableTankState.PortableTankStateMessage;
-import mekanism.common.network.PacketScubaTankData.ScubaTankDataMessage;
-import mekanism.common.network.PacketScubaTankData.ScubaTankPacket;
-import mekanism.common.network.PacketWalkieTalkieState.WalkieTalkieStateMessage;
-import mekanism.common.util.LangUtils;
-import mekanism.common.util.MekanismUtils;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.entity.AbstractClientPlayer;
-import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.ChatComponentText;
-import net.minecraft.util.StringUtils;
-
 import com.mojang.authlib.minecraft.MinecraftProfileTexture;
-
 import cpw.mods.fml.client.FMLClientHandler;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent.ClientTickEvent;
 import cpw.mods.fml.common.gameevent.TickEvent.Phase;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
+import mekanism.api.IClientTicker;
+import mekanism.api.MekanismConfig.client;
+import mekanism.api.gas.GasStack;
+import mekanism.client.sound.SoundHandler;
+import mekanism.common.KeySync;
+import mekanism.common.Mekanism;
+import mekanism.common.item.*;
+import mekanism.common.item.ItemJetpack.JetpackMode;
+import mekanism.common.network.PacketFlamethrowerData;
+import mekanism.common.network.PacketFlamethrowerData.FlamethrowerDataMessage;
+import mekanism.common.network.PacketJetpackData.JetpackDataMessage;
+import mekanism.common.network.PacketJetpackData.JetpackPacket;
+import mekanism.common.network.PacketScubaTankData.ScubaTankDataMessage;
+import mekanism.common.network.PacketScubaTankData.ScubaTankPacket;
+import mekanism.common.util.MekanismUtils;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.entity.AbstractClientPlayer;
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.item.ItemStack;
+import net.minecraft.util.StringUtils;
+
+import java.util.*;
+
+import static mekanism.client.sound.SoundHandler.Channel.*;
 
 /**
  * Client-side tick handler for Mekanism. Used mainly for the update check upon startup.
@@ -88,27 +68,10 @@ public class ClientTickHandler
 		{
 			tickStart();
 		}
-		else if(event.phase == Phase.END)
-		{
-			tickEnd();
-		}
 	}
 
 	public void tickStart()
 	{
-		if(!preloadedSounds && MekanismClient.enableSounds && MekanismClient.audioHandler != null && MekanismClient.audioHandler.isSystemLoaded())
-		{
-			preloadedSounds = true;
-			
-			new Thread(new Runnable() {
-				@Override
-				public void run()
-				{
-					MekanismClient.audioHandler.preloadSounds();
-				}
-			}).start();
-		}
-
 		MekanismClient.ticksPassed++;
 
 		if(!hasNotified && mc.theWorld != null && Mekanism.latestVersionNumber != null && Mekanism.recentNews != null)
@@ -223,134 +186,6 @@ public class ClientTickHandler
 				}
 			}
 
-			ItemStack stack = mc.thePlayer.getCurrentEquippedItem();
-
-			if(mc.currentScreen == null)
-			{
-				if(mc.thePlayer.isSneaking() && StackUtils.getItem(mc.thePlayer.getCurrentEquippedItem()) instanceof ItemConfigurator)
-				{
-					ItemConfigurator item = (ItemConfigurator)mc.thePlayer.getCurrentEquippedItem().getItem();
-
-					if(MekanismKeyHandler.modeSwitchKey.getIsKeyPressed())
-					{
-						if(!lastTickUpdate)
-						{
-							item.setState(stack, (byte)(item.getState(stack) < 3 ? item.getState(stack)+1 : 0));
-							Mekanism.packetHandler.sendToServer(new ConfiguratorStateMessage(item.getState(stack)));
-							mc.thePlayer.addChatMessage(new ChatComponentText(EnumColor.DARK_BLUE + "[Mekanism] " + EnumColor.GREY + MekanismUtils.localize("tooltip.configureState") + ": " + item.getColor(item.getState(stack)) + item.getStateDisplay(item.getState(stack))));
-							lastTickUpdate = true;
-						}
-					}
-					else {
-						lastTickUpdate = false;
-					}
-				}
-				else if(mc.thePlayer.isSneaking() && StackUtils.getItem(mc.thePlayer.getCurrentEquippedItem()) instanceof ItemElectricBow)
-				{
-					ItemElectricBow item = (ItemElectricBow)mc.thePlayer.getCurrentEquippedItem().getItem();
-
-					if(MekanismKeyHandler.modeSwitchKey.getIsKeyPressed())
-					{
-						if(!lastTickUpdate)
-						{
-							item.setFireState(stack, !item.getFireState(stack));
-							Mekanism.packetHandler.sendToServer(new ElectricBowStateMessage(item.getFireState(stack)));
-							mc.thePlayer.addChatMessage(new ChatComponentText(EnumColor.DARK_BLUE + "[Mekanism] " + EnumColor.GREY + MekanismUtils.localize("tooltip.fireMode") + ": " + (item.getFireState(stack) ? EnumColor.DARK_GREEN : EnumColor.DARK_RED) + LangUtils.transYesNo(item.getFireState(stack))));
-							lastTickUpdate = true;
-						}
-					}
-					else {
-						lastTickUpdate = false;
-					}
-				}
-				else if(mc.thePlayer.isSneaking() && StackUtils.getItem(mc.thePlayer.getCurrentEquippedItem()) instanceof ItemBlockMachine)
-				{
-					ItemBlockMachine item = (ItemBlockMachine)mc.thePlayer.getCurrentEquippedItem().getItem();
-
-					if(MachineType.get(mc.thePlayer.getCurrentEquippedItem()) == MachineType.PORTABLE_TANK)
-					{
-						if(MekanismKeyHandler.modeSwitchKey.getIsKeyPressed())
-						{
-							if(!lastTickUpdate)
-							{
-								item.setBucketMode(stack, !item.getBucketMode(stack));
-								Mekanism.packetHandler.sendToServer(new PortableTankStateMessage(item.getBucketMode(stack)));
-								mc.thePlayer.addChatMessage(new ChatComponentText(EnumColor.DARK_BLUE + "[Mekanism] " + EnumColor.GREY + MekanismUtils.localize("tooltip.portableTank.bucketMode") + ": " + (item.getBucketMode(stack) ? (EnumColor.DARK_GREEN + "ON") : (EnumColor.DARK_RED + "OFF"))));
-								lastTickUpdate = true;
-							}
-						}
-						else {
-							lastTickUpdate = false;
-						}
-					}
-				}
-				else if(mc.thePlayer.isSneaking() && StackUtils.getItem(mc.thePlayer.getCurrentEquippedItem()) instanceof ItemWalkieTalkie)
-				{
-					ItemWalkieTalkie item = (ItemWalkieTalkie)mc.thePlayer.getCurrentEquippedItem().getItem();
-
-					if(MekanismKeyHandler.modeSwitchKey.getIsKeyPressed() && item.getOn(stack))
-					{
-						if(!lastTickUpdate)
-						{
-							int newChan = item.getChannel(stack) < 9 ? item.getChannel(stack)+1 : 1;
-							item.setChannel(stack, newChan);
-							Mekanism.packetHandler.sendToServer(new WalkieTalkieStateMessage(newChan));
-							SoundHandler.playSound("mekanism:etc.Ding");
-							lastTickUpdate = true;
-						}
-					}
-					else {
-						lastTickUpdate = false;
-					}
-				}
-				else if(mc.thePlayer.getEquipmentInSlot(3) != null && mc.thePlayer.getEquipmentInSlot(3).getItem() instanceof ItemJetpack)
-				{
-					ItemStack jetpack = mc.thePlayer.getEquipmentInSlot(3);
-
-					if(MekanismKeyHandler.modeSwitchKey.getIsKeyPressed())
-					{
-						if(!lastTickUpdate)
-						{
-							if(mc.thePlayer.isSneaking())
-							{
-								((ItemJetpack)jetpack.getItem()).setMode(jetpack, JetpackMode.DISABLED);
-							}
-							else {
-								((ItemJetpack)jetpack.getItem()).incrementMode(jetpack);
-							}
-							
-							Mekanism.packetHandler.sendToServer(new JetpackDataMessage(JetpackPacket.MODE, null, mc.thePlayer.isSneaking()));
-							SoundHandler.playSound("mekanism:etc.Hydraulic");
-							lastTickUpdate = true;
-						}
-					}
-					else {
-						lastTickUpdate = false;
-					}
-				}
-				else if(mc.thePlayer.getEquipmentInSlot(3) != null && mc.thePlayer.getEquipmentInSlot(3).getItem() instanceof ItemScubaTank)
-				{
-					ItemStack scubaTank = mc.thePlayer.getEquipmentInSlot(3);
-
-					if(MekanismKeyHandler.modeSwitchKey.getIsKeyPressed())
-					{
-						if(!lastTickUpdate)
-						{
-							((ItemScubaTank)scubaTank.getItem()).toggleFlowing(scubaTank);
-							Mekanism.packetHandler.sendToServer(new ScubaTankDataMessage(ScubaTankPacket.MODE, null, false));
-							SoundHandler.playSound("mekanism:etc.Hydraulic");
-							lastTickUpdate = true;
-						}
-					}
-					else {
-						lastTickUpdate = false;
-					}
-				}
-				else {
-					lastTickUpdate = false;
-				}
-			}
-
 			if(mc.thePlayer.getEquipmentInSlot(1) != null && mc.thePlayer.getEquipmentInSlot(1).getItem() instanceof ItemFreeRunners)
 			{
 				mc.thePlayer.stepHeight = 1.002F;
@@ -360,6 +195,19 @@ public class ClientTickHandler
 				{
 					mc.thePlayer.stepHeight = 0.5F;
 				}
+			}
+			
+			if(Mekanism.flamethrowerActive.contains(mc.thePlayer.getCommandSenderName()) != isFlamethrowerOn(mc.thePlayer))
+			{
+				if(isFlamethrowerOn(mc.thePlayer))
+				{
+					Mekanism.flamethrowerActive.add(mc.thePlayer.getCommandSenderName());
+				}
+				else {
+					Mekanism.flamethrowerActive.remove(mc.thePlayer.getCommandSenderName());
+				}
+				
+				Mekanism.packetHandler.sendToServer(new FlamethrowerDataMessage(PacketFlamethrowerData.FlamethrowerPacket.UPDATE, mc.thePlayer.getCommandSenderName(), isFlamethrowerOn(mc.thePlayer)));
 			}
 
 			if(Mekanism.jetpackOn.contains(mc.thePlayer.getCommandSenderName()) != isJetpackOn(mc.thePlayer))
@@ -388,33 +236,48 @@ public class ClientTickHandler
 				Mekanism.packetHandler.sendToServer(new ScubaTankDataMessage(ScubaTankPacket.UPDATE, mc.thePlayer.getCommandSenderName(), isGasMaskOn(mc.thePlayer)));
 			}
 
-			if(MekanismClient.audioHandler != null)
+			if(client.enablePlayerSounds)
 			{
-				synchronized(Mekanism.jetpackOn)
+				for(String username : Mekanism.jetpackOn)
 				{
-					for (String username : Mekanism.jetpackOn)
+					EntityPlayer player = mc.theWorld.getPlayerEntityByName(username);
+
+					if(player != null)
 					{
-						if (mc.theWorld.getPlayerEntityByName(username) != null)
+						if(!SoundHandler.soundPlaying(player, JETPACK))
 						{
-							if (MekanismClient.audioHandler.getFrom(mc.theWorld.getPlayerEntityByName(username)) == null)
-							{
-								new JetpackSound(MekanismClient.audioHandler.getIdentifier(), mc.theWorld.getPlayerEntityByName(username));
-							}
+							SoundHandler.addSound(player, JETPACK, client.replaceSoundsWhenResuming);
 						}
+						
+						SoundHandler.playSound(player, JETPACK);
 					}
 				}
 
-				synchronized(Mekanism.gasmaskOn)
+				for(String username : Mekanism.gasmaskOn)
 				{
-					for (String username : Mekanism.gasmaskOn)
+					EntityPlayer player = mc.theWorld.getPlayerEntityByName(username);
+
+					if(player != null)
 					{
-						if (mc.theWorld.getPlayerEntityByName(username) != null)
+						if(!SoundHandler.soundPlaying(player, GASMASK))
 						{
-							if (MekanismClient.audioHandler.getFrom(mc.theWorld.getPlayerEntityByName(username)) == null)
-							{
-								new GasMaskSound(MekanismClient.audioHandler.getIdentifier(), mc.theWorld.getPlayerEntityByName(username));
-							}
+							SoundHandler.addSound(player, GASMASK, client.replaceSoundsWhenResuming);
 						}
+						
+						SoundHandler.playSound(player, GASMASK);
+					}
+				}
+
+				for(EntityPlayer player : (List<EntityPlayer>)mc.theWorld.playerEntities)
+				{
+					if(hasFlamethrower(player))
+					{
+						if(!SoundHandler.soundPlaying(player, FLAMETHROWER))
+						{
+							SoundHandler.addSound(player, FLAMETHROWER, client.replaceSoundsWhenResuming);
+						}
+						
+						SoundHandler.playSound(player, FLAMETHROWER);
 					}
 				}
 			}
@@ -423,6 +286,16 @@ public class ClientTickHandler
 			{
 				MekanismClient.updateKey(mc.gameSettings.keyBindJump, KeySync.ASCEND);
 				MekanismClient.updateKey(mc.gameSettings.keyBindSneak, KeySync.DESCEND);
+			}
+			
+			if(isFlamethrowerOn(mc.thePlayer))
+			{
+				ItemFlamethrower flamethrower = (ItemFlamethrower)mc.thePlayer.getCurrentEquippedItem().getItem();
+				
+				if(!mc.thePlayer.capabilities.isCreativeMode)
+				{
+					flamethrower.useGas(mc.thePlayer.getCurrentEquippedItem());
+				}
 			}
 
 			if(isJetpackOn(mc.thePlayer))
@@ -469,14 +342,14 @@ public class ClientTickHandler
 				ItemScubaTank tank = (ItemScubaTank)mc.thePlayer.getEquipmentInSlot(3).getItem();
 
 				final int max = 300;
-				
+
 				tank.useGas(mc.thePlayer.getEquipmentInSlot(3));
-				GasStack received = tank.removeGas(mc.thePlayer.getEquipmentInSlot(3), max-mc.thePlayer.getAir());
-				
+				GasStack received = tank.useGas(mc.thePlayer.getEquipmentInSlot(3), max-mc.thePlayer.getAir());
+
 				if(received != null)
 				{
 					mc.thePlayer.setAir(mc.thePlayer.getAir()+received.amount);
-					
+
 					if(mc.thePlayer.getAir() == max)
 					{
 						mc.thePlayer.clearActivePotions();
@@ -557,15 +430,37 @@ public class ClientTickHandler
 
 		return false;
 	}
-
-	public void tickEnd()
+	
+	public static boolean isFlamethrowerOn(EntityPlayer player)
 	{
-		if(MekanismClient.audioHandler != null)
+		if(player != mc.thePlayer)
 		{
-			synchronized(MekanismClient.audioHandler.sounds)
+			return Mekanism.flamethrowerActive.contains(player.getCommandSenderName());
+		}
+		
+		if(hasFlamethrower(player))
+		{
+			if(mc.gameSettings.keyBindUseItem.getIsKeyPressed())
 			{
-				MekanismClient.audioHandler.onTick();
+				return true;
 			}
 		}
+		
+		return false;
+	}
+	
+	public static boolean hasFlamethrower(EntityPlayer player)
+	{
+		if(player.getCurrentEquippedItem() != null && player.getCurrentEquippedItem().getItem() instanceof ItemFlamethrower)
+		{
+			ItemFlamethrower flamethrower = (ItemFlamethrower)player.getCurrentEquippedItem().getItem();
+			
+			if(flamethrower.getGas(player.getCurrentEquippedItem()) != null)
+			{
+				return true;
+			}
+		}
+		
+		return false;
 	}
 }

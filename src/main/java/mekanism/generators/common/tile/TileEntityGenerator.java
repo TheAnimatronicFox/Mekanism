@@ -1,34 +1,29 @@
 package mekanism.generators.common.tile;
 
-import java.util.ArrayList;
-import java.util.EnumSet;
-
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
+import io.netty.buffer.ByteBuf;
 import mekanism.api.Coord4D;
+import mekanism.api.MekanismConfig.general;
 import mekanism.api.Range4D;
-import mekanism.client.sound.IHasSound;
-import mekanism.common.IActiveState;
-import mekanism.common.IRedstoneControl;
+import mekanism.client.sound.ISoundSource;
 import mekanism.common.Mekanism;
+import mekanism.common.base.IActiveState;
+import mekanism.common.base.IHasSound;
+import mekanism.common.base.IRedstoneControl;
+import mekanism.common.integration.IComputerIntegration;
 import mekanism.common.network.PacketTileEntity.TileEntityMessage;
-import mekanism.common.tile.TileEntityElectricBlock;
+import mekanism.common.tile.TileEntityNoisyElectricBlock;
 import mekanism.common.util.CableUtils;
 import mekanism.common.util.MekanismUtils;
-
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.AxisAlignedBB;
 import net.minecraftforge.common.util.ForgeDirection;
-import cpw.mods.fml.common.Optional.Interface;
-import cpw.mods.fml.common.Optional.Method;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
 
-import io.netty.buffer.ByteBuf;
+import java.util.ArrayList;
+import java.util.EnumSet;
 
-import dan200.computercraft.api.peripheral.IComputerAccess;
-import dan200.computercraft.api.peripheral.IPeripheral;
-
-@Interface(iface = "dan200.computercraft.api.peripheral.IPeripheral", modid = "ComputerCraft")
-public abstract class TileEntityGenerator extends TileEntityElectricBlock implements IPeripheral, IActiveState, IHasSound, IRedstoneControl
+public abstract class TileEntityGenerator extends TileEntityNoisyElectricBlock implements IComputerIntegration, IActiveState, IHasSound, ISoundSource, IRedstoneControl
 {
 	/** Output per tick this generator can transfer. */
 	public double output;
@@ -50,9 +45,9 @@ public abstract class TileEntityGenerator extends TileEntityElectricBlock implem
 	 * @param name - full name of this generator
 	 * @param maxEnergy - how much energy this generator can store
 	 */
-	public TileEntityGenerator(String name, double maxEnergy, double out)
+	public TileEntityGenerator(String soundPath, String name, double maxEnergy, double out)
 	{
-		super(name, maxEnergy);
+		super("gen." + soundPath, name, maxEnergy);
 
 		output = out;
 		isActive = false;
@@ -64,19 +59,14 @@ public abstract class TileEntityGenerator extends TileEntityElectricBlock implem
 	{
 		super.onUpdate();
 
-		if(worldObj.isRemote)
+		if(worldObj.isRemote && updateDelay > 0)
 		{
-			Mekanism.proxy.registerSound(this);
+			updateDelay--;
 
-			if(updateDelay > 0)
+			if(updateDelay == 0 && clientActive != isActive)
 			{
-				updateDelay--;
-
-				if(updateDelay == 0 && clientActive != isActive)
-				{
-					isActive = clientActive;
-					MekanismUtils.updateBlock(worldObj, xCoord, yCoord, zCoord);
-				}
+				isActive = clientActive;
+				MekanismUtils.updateBlock(worldObj, xCoord, yCoord, zCoord);
 			}
 		}
 
@@ -107,7 +97,7 @@ public abstract class TileEntityGenerator extends TileEntityElectricBlock implem
 	}
 
 	@Override
-	protected EnumSet<ForgeDirection> getConsumingSides()
+	public EnumSet<ForgeDirection> getConsumingSides()
 	{
 		return EnumSet.noneOf(ForgeDirection.class);
 	}
@@ -116,17 +106,6 @@ public abstract class TileEntityGenerator extends TileEntityElectricBlock implem
 	public EnumSet<ForgeDirection> getOutputtingSides()
 	{
 		return EnumSet.of(ForgeDirection.getOrientation(facing));
-	}
-
-	@Override
-	public void invalidate()
-	{
-		super.invalidate();
-
-		if(worldObj.isRemote)
-		{
-			Mekanism.proxy.unregisterSound(this);
-		}
 	}
 
 	/**
@@ -150,31 +129,9 @@ public abstract class TileEntityGenerator extends TileEntityElectricBlock implem
 		{
 			Mekanism.packetHandler.sendToReceivers(new TileEntityMessage(Coord4D.get(this), getNetworkedData(new ArrayList())), new Range4D(Coord4D.get(this)));
 
-			updateDelay = Mekanism.UPDATE_DELAY;
+			updateDelay = general.UPDATE_DELAY;
 			clientActive = active;
 		}
-	}
-
-	@Override
-	@Method(modid = "ComputerCraft")
-	public String getType()
-	{
-		return getInventoryName();
-	}
-
-	@Override
-	@Method(modid = "ComputerCraft")
-	public void attach(IComputerAccess computer) {}
-
-	@Override
-	@Method(modid = "ComputerCraft")
-	public void detach(IComputerAccess computer) {}
-
-	@Override
-	@Method(modid = "ComputerCraft")
-	public boolean equals(IPeripheral other)
-	{
-		return this == other;
 	}
 
 	@Override
@@ -193,7 +150,7 @@ public abstract class TileEntityGenerator extends TileEntityElectricBlock implem
 
 		if(updateDelay == 0 && clientActive != isActive)
 		{
-			updateDelay = Mekanism.UPDATE_DELAY;
+			updateDelay = general.UPDATE_DELAY;
 			isActive = clientActive;
 			MekanismUtils.updateBlock(worldObj, xCoord, yCoord, zCoord);
 		}
@@ -236,18 +193,6 @@ public abstract class TileEntityGenerator extends TileEntityElectricBlock implem
 	}
 
 	@Override
-	public String getSoundPath()
-	{
-		return fullName.replace("Advanced", "") + ".ogg";
-	}
-
-	@Override
-	public float getVolumeMultiplier()
-	{
-		return 1;
-	}
-
-	@Override
 	public boolean renderUpdate()
 	{
 		return true;
@@ -270,5 +215,11 @@ public abstract class TileEntityGenerator extends TileEntityElectricBlock implem
 	{
 		controlType = type;
 		MekanismUtils.saveChunk(this);
+	}
+
+	@Override
+	public boolean canPulse()
+	{
+		return false;
 	}
 }

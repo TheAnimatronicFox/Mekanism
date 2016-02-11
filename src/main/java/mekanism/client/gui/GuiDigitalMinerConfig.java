@@ -13,19 +13,19 @@ import mekanism.client.render.MekanismRenderer;
 import mekanism.client.sound.SoundHandler;
 import mekanism.common.Mekanism;
 import mekanism.common.OreDictCache;
+import mekanism.common.content.miner.MItemStackFilter;
+import mekanism.common.content.miner.MMaterialFilter;
+import mekanism.common.content.miner.MModIDFilter;
+import mekanism.common.content.miner.MOreDictFilter;
+import mekanism.common.content.miner.MinerFilter;
 import mekanism.common.inventory.container.ContainerNull;
-import mekanism.common.miner.MItemStackFilter;
-import mekanism.common.miner.MMaterialFilter;
-import mekanism.common.miner.MModIDFilter;
-import mekanism.common.miner.MOreDictFilter;
-import mekanism.common.miner.MinerFilter;
 import mekanism.common.network.PacketDigitalMinerGui.DigitalMinerGuiMessage;
 import mekanism.common.network.PacketDigitalMinerGui.MinerGuiPacket;
 import mekanism.common.network.PacketTileEntity.TileEntityMessage;
 import mekanism.common.tile.TileEntityDigitalMiner;
+import mekanism.common.util.LangUtils;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.MekanismUtils.ResourceType;
-
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiTextField;
 import net.minecraft.entity.player.EntityPlayer;
@@ -34,6 +34,7 @@ import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
 
 import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.GL11;
 
 @SideOnly(Side.CLIENT)
@@ -42,6 +43,20 @@ public class GuiDigitalMinerConfig extends GuiMekanism
 	public TileEntityDigitalMiner tileEntity;
 
 	public boolean isDragging = false;
+
+	// Scrollbar dimensions
+	private final int scrollX = 154;
+	private final int scrollY = 18;
+
+	private final int scrollW = 12;
+	private final int scrollH = 138;
+
+	// Filter dimensions
+	private final int filterX = 56;
+	private final int filterY = 18;
+
+	private final int filterW = 96;
+	private final int filterH = 29;
 
 	public int dragOffset = 0;
 
@@ -58,7 +73,7 @@ public class GuiDigitalMinerConfig extends GuiMekanism
 
 	public GuiDigitalMinerConfig(EntityPlayer player, TileEntityDigitalMiner tentity)
 	{
-		super(new ContainerNull(player, tentity));
+		super(tentity, new ContainerNull(player, tentity));
 		tileEntity = tentity;
 	}
 
@@ -69,12 +84,13 @@ public class GuiDigitalMinerConfig extends GuiMekanism
 
 	public int getFilterIndex()
 	{
-		if(tileEntity.filters.size() <= 4)
+		if(needsScrollBars())
 		{
-			return 0;
+			final int scrollSize = tileEntity.filters.size() - 4;
+			return (int)((scrollSize + 0.5) * scroll);
 		}
-
-		return (int)((tileEntity.filters.size()*scroll) - ((4F/(float)tileEntity.filters.size()))*scroll);
+		
+		return 0;
 	}
 
 	@Override
@@ -197,8 +213,14 @@ public class GuiDigitalMinerConfig extends GuiMekanism
 
 			if(xAxis >= 154 && xAxis <= 166 && yAxis >= getScroll()+18 && yAxis <= getScroll()+18+15)
 			{
-				dragOffset = yAxis - (getScroll()+18);
-				isDragging = true;
+				if(needsScrollBars())
+				{
+					dragOffset = yAxis - (getScroll()+18);
+					isDragging = true;
+				}
+				else {
+					scroll = 0;
+				}
 			}
 
 			for(int i = 0; i < 4; i++)
@@ -206,6 +228,41 @@ public class GuiDigitalMinerConfig extends GuiMekanism
 				if(tileEntity.filters.get(getFilterIndex()+i) != null)
 				{
 					int yStart = i*29 + 18;
+
+					// Check for sorting button
+					final int arrowX = filterX + filterW - 12;
+					
+					if(getFilterIndex() + i > 0)
+					{
+						if(xAxis >= arrowX && xAxis <= arrowX + 10 && yAxis >= yStart + 14 && yAxis <= yStart + 20)
+						{
+							// Process up button click
+							final ArrayList data = new ArrayList();
+							data.add(11);
+							data.add(getFilterIndex() + i);
+
+							Mekanism.packetHandler.sendToServer(new TileEntityMessage(Coord4D.get(tileEntity), data));
+							SoundHandler.playSound("gui.button.press");
+							
+							return;
+						}
+					}
+					
+					if(getFilterIndex() + i < tileEntity.filters.size() - 1)
+					{
+						if(xAxis >= arrowX && xAxis <= arrowX + 10 && yAxis >= yStart + 21 && yAxis <= yStart + 27)
+						{
+							// Process down button click
+							final ArrayList data = new ArrayList();
+							data.add(12);
+							data.add(getFilterIndex() + i);
+
+							Mekanism.packetHandler.sendToServer(new TileEntityMessage(Coord4D.get(tileEntity), data));
+							SoundHandler.playSound("gui.button.press");
+							
+							return;
+						}
+					}
 
 					if(xAxis >= 56 && xAxis <= 152 && yAxis >= yStart && yAxis <= yStart+29)
 					{
@@ -296,6 +353,44 @@ public class GuiDigitalMinerConfig extends GuiMekanism
 		}
 	}
 
+	/**
+	 * Handles mouse input.
+	 */
+	@Override
+	public void handleMouseInput()
+	{
+		super.handleMouseInput();
+		
+		int i = Mouse.getEventDWheel();
+
+		if(i != 0 && needsScrollBars())
+		{
+			final int j = tileEntity.filters.size() - 4;
+
+			if(i > 0)
+			{
+				i = 1;
+			}
+
+			if(i < 0)
+			{
+				i = -1;
+			}
+
+			scroll = (float)(scroll - (double) i / (double) j);
+
+			if(scroll < 0.0F)
+			{
+				scroll = 0.0F;
+			}
+
+			if(scroll > 1.0F)
+			{
+				scroll = 1.0F;
+			}
+		}
+	}
+
 	@Override
 	public void initGui()
 	{
@@ -305,7 +400,7 @@ public class GuiDigitalMinerConfig extends GuiMekanism
 		int guiHeight = (height - ySize) / 2;
 
 		buttonList.clear();
-		buttonList.add(new GuiButton(0, guiWidth + 56, guiHeight + 136, 96, 20, MekanismUtils.localize("gui.newFilter")));
+		buttonList.add(new GuiButton(0, guiWidth + 56, guiHeight + 136, 96, 20, LangUtils.localize("gui.newFilter")));
 
 		String prevRad = radiusField != null ? radiusField.getText() : "";
 		String prevMin = minField != null ? minField.getText() : "";
@@ -341,12 +436,12 @@ public class GuiDigitalMinerConfig extends GuiMekanism
 		int xAxis = (mouseX - (width - xSize) / 2);
 		int yAxis = (mouseY - (height - ySize) / 2);
 
-		fontRendererObj.drawString(MekanismUtils.localize("gui.digitalMinerConfig"), 43, 6, 0x404040);
+		fontRendererObj.drawString(LangUtils.localize("gui.digitalMinerConfig"), 43, 6, 0x404040);
 
-		fontRendererObj.drawString(MekanismUtils.localize("gui.filters") + ":", 11, 19, 0x00CD00);
+		fontRendererObj.drawString(LangUtils.localize("gui.filters") + ":", 11, 19, 0x00CD00);
 		fontRendererObj.drawString("T: " + tileEntity.filters.size(), 11, 28, 0x00CD00);
 		
-		fontRendererObj.drawString("I: " + (tileEntity.inverse ? MekanismUtils.localize("gui.on") : MekanismUtils.localize("gui.off")), 11, 131, 0x00CD00);
+		fontRendererObj.drawString("I: " + (tileEntity.inverse ? LangUtils.localize("gui.on") : LangUtils.localize("gui.off")), 11, 131, 0x00CD00);
 
 		fontRendererObj.drawString("Radi: " + tileEntity.radius, 11, 58, 0x00CD00);
 
@@ -374,7 +469,7 @@ public class GuiDigitalMinerConfig extends GuiMekanism
 						GL11.glPopMatrix();
 					}
 
-					fontRendererObj.drawString(MekanismUtils.localize("gui.itemFilter"), 78, yStart + 2, 0x404040);
+					fontRendererObj.drawString(LangUtils.localize("gui.itemFilter"), 78, yStart + 2, 0x404040);
 				}
 				else if(filter instanceof MOreDictFilter)
 				{
@@ -396,7 +491,7 @@ public class GuiDigitalMinerConfig extends GuiMekanism
 						} catch(Exception e) {}
 					}
 
-					fontRendererObj.drawString(MekanismUtils.localize("gui.oredictFilter"), 78, yStart + 2, 0x404040);
+					fontRendererObj.drawString(LangUtils.localize("gui.oredictFilter"), 78, yStart + 2, 0x404040);
 				}
 				else if(filter instanceof MMaterialFilter)
 				{
@@ -411,7 +506,7 @@ public class GuiDigitalMinerConfig extends GuiMekanism
 						GL11.glPopMatrix();
 					}
 
-					fontRendererObj.drawString(MekanismUtils.localize("gui.materialFilter"), 78, yStart + 2, 0x404040);
+					fontRendererObj.drawString(LangUtils.localize("gui.materialFilter"), 78, yStart + 2, 0x404040);
 				}
 				else if(filter instanceof MModIDFilter)
 				{
@@ -433,14 +528,14 @@ public class GuiDigitalMinerConfig extends GuiMekanism
 						} catch(Exception e) {}
 					}
 
-					fontRendererObj.drawString(MekanismUtils.localize("gui.modIDFilter"), 78, yStart + 2, 0x404040);
+					fontRendererObj.drawString(LangUtils.localize("gui.modIDFilter"), 78, yStart + 2, 0x404040);
 				}
 			}
 		}
 
 		if(xAxis >= 11 && xAxis <= 25 && yAxis >= 141 && yAxis <= 155)
 		{
-			drawCreativeTabHoveringText(MekanismUtils.localize("gui.digitalMiner.inverse"), xAxis, yAxis);
+			drawCreativeTabHoveringText(LangUtils.localize("gui.digitalMiner.inverse"), xAxis, yAxis);
 		}
 
 		super.drawGuiContainerForegroundLayer(mouseX, mouseY);
@@ -457,7 +552,7 @@ public class GuiDigitalMinerConfig extends GuiMekanism
 		int guiHeight = (height - ySize) / 2;
 		drawTexturedModalRect(guiWidth, guiHeight, 0, 0, xSize, ySize);
 
-		drawTexturedModalRect(guiWidth + 154, guiHeight + 18 + getScroll(), 232, 0, 12, 15);
+		drawTexturedModalRect( guiLeft + scrollX, guiTop + scrollY + getScroll(), 232 + ( needsScrollBars() ? 0 : 12 ), 0, 12, 15 );
 
 		int xAxis = (mouseX - (width - xSize) / 2);
 		int yAxis = (mouseY - (height - ySize) / 2);
@@ -490,6 +585,19 @@ public class GuiDigitalMinerConfig extends GuiMekanism
 				
 				drawTexturedModalRect(guiWidth + 56, guiHeight + yStart, mouseOver ? 0 : 96, 166, 96, 29);
 				MekanismRenderer.resetColor();
+
+				// Draw sort buttons
+				final int arrowX = filterX + filterW - 12;
+				if( getFilterIndex() + i > 0 )
+				{
+					mouseOver = xAxis >= arrowX && xAxis <= arrowX + 10 && yAxis >= yStart + 14 && yAxis <= yStart + 20;
+					drawTexturedModalRect( guiLeft + arrowX, guiTop + yStart + 14, 190, mouseOver ? 143 : 115, 11, 7 );
+				}
+				if( getFilterIndex() + i < tileEntity.filters.size() - 1 )
+				{
+					mouseOver = xAxis >= arrowX && xAxis <= arrowX + 10 && yAxis >= yStart + 21 && yAxis <= yStart + 27;
+					drawTexturedModalRect( guiLeft + arrowX, guiTop + yStart + 21, 190, mouseOver ? 157 : 129, 11, 7 );
+				}
 			}
 		}
 
@@ -651,5 +759,13 @@ public class GuiDigitalMinerConfig extends GuiMekanism
 		public List<ItemStack> iterStacks;
 		public int stackIndex;
 		public ItemStack renderStack;
+	}
+
+	/**
+	 * returns true if there are more filters than can fit in the gui
+	 */
+	private boolean needsScrollBars()
+	{
+		return tileEntity.filters.size() > 4;
 	}
 }

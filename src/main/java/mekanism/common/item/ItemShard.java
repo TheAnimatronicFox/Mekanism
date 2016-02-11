@@ -2,9 +2,7 @@ package mekanism.common.item;
 
 import java.util.List;
 
-import mekanism.common.Mekanism;
 import mekanism.common.Resource;
-
 import net.minecraft.client.renderer.texture.IIconRegister;
 import net.minecraft.creativetab.CreativeTabs;
 import net.minecraft.item.Item;
@@ -19,7 +17,6 @@ public class ItemShard extends ItemMekanism
 	{
 		super();
 		setHasSubtypes(true);
-		setCreativeTab(Mekanism.tabMekanism);
 	}
 
 	@Override
@@ -49,6 +46,11 @@ public class ItemShard extends ItemMekanism
 	@Override
 	public String getUnlocalizedName(ItemStack item)
 	{
-		return "item." + Resource.values()[item.getItemDamage()].getName().toLowerCase() + "Shard";
+		if(item.getItemDamage() <= Resource.values().length-1)
+		{
+			return "item." + Resource.values()[item.getItemDamage()].getName().toLowerCase() + "Shard";
+		}
+		
+		return "Invalid";
 	}
 }

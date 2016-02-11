@@ -4,25 +4,26 @@ import java.util.HashMap;
 import java.util.Map;
 
 import mekanism.api.Coord4D;
+import mekanism.api.EnumColor;
 import mekanism.client.model.ModelTransporterBox;
 import mekanism.client.render.MekanismRenderer.DisplayInteger;
 import mekanism.client.render.MekanismRenderer.Model3D;
+import mekanism.common.content.transporter.TransporterStack;
 import mekanism.common.item.ItemConfigurator;
+import mekanism.common.multipart.MultipartTransporter;
 import mekanism.common.multipart.PartDiversionTransporter;
+import mekanism.common.multipart.PartHeatTransmitter;
 import mekanism.common.multipart.PartLogisticalTransporter;
 import mekanism.common.multipart.PartMechanicalPipe;
 import mekanism.common.multipart.PartPressurizedTube;
 import mekanism.common.multipart.PartSidedPipe;
 import mekanism.common.multipart.PartSidedPipe.ConnectionType;
-import mekanism.common.multipart.PartTransmitter;
 import mekanism.common.multipart.PartUniversalCable;
 import mekanism.common.multipart.TransmitterType;
 import mekanism.common.multipart.TransmitterType.Size;
-import mekanism.common.transporter.TransporterStack;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.MekanismUtils.ResourceType;
 import mekanism.common.util.TransporterUtils;
-
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.entity.RenderItem;
 import net.minecraft.client.renderer.entity.RenderManager;
@@ -39,8 +40,6 @@ import net.minecraft.util.MovingObjectPosition;
 import net.minecraft.world.World;
 import net.minecraftforge.common.util.ForgeDirection;
 import net.minecraftforge.fluids.Fluid;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
 
 import org.lwjgl.opengl.GL11;
 
@@ -56,6 +55,8 @@ import codechicken.lib.render.TextureUtils.IIconSelfRegister;
 import codechicken.lib.render.uv.IconTransformation;
 import codechicken.lib.vec.Translation;
 import codechicken.lib.vec.Vector3;
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
 
 @SideOnly(Side.CLIENT)
 public class RenderPartTransmitter implements IIconSelfRegister
@@ -145,7 +146,17 @@ public class RenderPartTransmitter implements IIconSelfRegister
 		
 		for(ForgeDirection side : ForgeDirection.VALID_DIRECTIONS)
 		{
-			renderSide(side, type);
+			renderSide(side, type, false);
+		}
+		
+		CCRenderState.draw();
+		
+		CCRenderState.reset();
+		CCRenderState.startDrawing();
+		
+		for(ForgeDirection side : ForgeDirection.VALID_DIRECTIONS)
+		{
+			renderSide(side, type, true);
 		}
 		
 		CCRenderState.draw();
@@ -161,14 +172,14 @@ public class RenderPartTransmitter implements IIconSelfRegister
 		entityItem.setPosition(transporter.x() + 0.5, transporter.y() + 0.5, transporter.z() + 0.5);
 		entityItem.worldObj = transporter.world();
 
-		for(TransporterStack stack : transporter.transit)
+		for(TransporterStack stack : transporter.getTransmitter().transit)
 		{
 			if(stack != null)
 			{
 				GL11.glPushMatrix();
 				entityItem.setEntityItemStack(stack.itemStack);
 
-				float[] pos = TransporterUtils.getStackPosition(transporter, stack, partialTick*PartLogisticalTransporter.SPEED);
+				float[] pos = TransporterUtils.getStackPosition(transporter.getTransmitter(), stack, partialTick*transporter.tier.speed);
 
 				GL11.glTranslated(vec.x + pos[0], vec.y + pos[1] - entityItem.yOffset, vec.z + pos[2]);
 				GL11.glScalef(0.75F, 0.75F, 0.75F);
@@ -238,7 +249,7 @@ public class RenderPartTransmitter implements IIconSelfRegister
 			return;
 		}
 
-		GL11.glPushMatrix();
+		push();
 		CCRenderState.reset();
 		CCRenderState.useNormals = true;
 		CCRenderState.startDrawing();
@@ -257,12 +268,44 @@ public class RenderPartTransmitter implements IIconSelfRegister
 		MekanismRenderer.disableCullFace();
 		MekanismRenderer.glowOff();
 
-		GL11.glPopMatrix();
+		pop();
+	}
+
+	public void renderContents(PartHeatTransmitter transmitter, Vector3 pos)
+	{
+		push();
+		CCRenderState.reset();
+		CCRenderState.useNormals = true;
+		CCRenderState.startDrawing();
+		GL11.glTranslated(pos.x, pos.y, pos.z);
+
+		for(ForgeDirection side : ForgeDirection.VALID_DIRECTIONS)
+		{
+			renderHeatSide(side, transmitter);
+		}
+
+		MekanismRenderer.glowOn();
+		MekanismRenderer.cullFrontFace();
+
+		CCRenderState.draw();
+
+		MekanismRenderer.disableCullFace();
+		MekanismRenderer.glowOff();
+
+		pop();
 	}
 
 	public void renderContents(PartMechanicalPipe pipe, Vector3 pos)
 	{
-		float targetScale = pipe.getTransmitterNetwork().fluidScale;
+		float targetScale;
+		if(pipe.getTransmitter().hasTransmitterNetwork())
+		{
+			targetScale = pipe.getTransmitter().getTransmitterNetwork().fluidScale;
+		}
+		else
+		{
+			targetScale = (float)pipe.buffer.getFluidAmount() / (float)pipe.buffer.getCapacity();
+		}
 
 		if(Math.abs(pipe.currentScale - targetScale) > 0.01)
 		{
@@ -272,7 +315,16 @@ public class RenderPartTransmitter implements IIconSelfRegister
 			pipe.currentScale = targetScale;
 		}
 
-		Fluid fluid = pipe.getTransmitterNetwork().refFluid;
+		Fluid fluid;
+
+		if(pipe.getTransmitter().hasTransmitterNetwork())
+		{
+			fluid = pipe.getTransmitter().getTransmitterNetwork().refFluid;
+		}
+		else {
+			fluid = pipe.getBuffer() == null ? null : pipe.getBuffer().getFluid();
+		}
+
 		float scale = pipe.currentScale;
 
 		if(scale > 0.01 && fluid != null)
@@ -280,6 +332,7 @@ public class RenderPartTransmitter implements IIconSelfRegister
 			push();
 
 			MekanismRenderer.glowOn(fluid.getLuminosity());
+			MekanismRenderer.colorFluid(fluid);
 
 			CCRenderState.changeTexture(MekanismRenderer.getBlocksTexture());
 			GL11.glTranslated(pos.x, pos.y, pos.z);
@@ -329,10 +382,10 @@ public class RenderPartTransmitter implements IIconSelfRegister
 			}
 
 			MekanismRenderer.glowOff();
+			MekanismRenderer.resetColor();
 
 			pop();
 		}
-
 	}
 
 	private DisplayInteger[] getListAndRender(ForgeDirection side, Fluid fluid)
@@ -365,8 +418,6 @@ public class RenderPartTransmitter implements IIconSelfRegister
 			map.put(fluid, displays);
 			cachedLiquids.put(side, map);
 		}
-
-		MekanismRenderer.colorFluid(fluid);
 
 		for(int i = 0; i < stages; i++)
 		{
@@ -457,19 +508,18 @@ public class RenderPartTransmitter implements IIconSelfRegister
 			displays[i].endList();
 		}
 
-		GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
-
 		return displays;
 	}
 
 	public void renderContents(PartPressurizedTube tube, Vector3 pos)
 	{
-		if(tube.getTransmitterNetwork().refGas == null || tube.getTransmitterNetwork().gasScale == 0)
+		if(!tube.getTransmitter().hasTransmitterNetwork() || tube.getTransmitter().getTransmitterNetwork().refGas == null || tube.getTransmitter().getTransmitterNetwork().gasScale == 0)
 		{
 			return;
 		}
 
-		GL11.glPushMatrix();
+		push();
+		
 		CCRenderState.reset();
 		CCRenderState.useNormals = true;
 		CCRenderState.startDrawing();
@@ -487,10 +537,11 @@ public class RenderPartTransmitter implements IIconSelfRegister
 
 		MekanismRenderer.disableCullFace();
 		MekanismRenderer.glowOff();
-		GL11.glPopMatrix();
+		
+		pop();
 	}
 
-	public void renderStatic(PartSidedPipe transmitter)
+	public void renderStatic(PartSidedPipe transmitter, int pass)
 	{
 		CCRenderState.reset();
 		CCRenderState.hasColour = true;
@@ -498,30 +549,49 @@ public class RenderPartTransmitter implements IIconSelfRegister
 
 		for(ForgeDirection side : ForgeDirection.VALID_DIRECTIONS)
 		{
-			renderSide(side, transmitter);
+			renderSide(side, transmitter, pass);
 		}
 	}
 
-	public void renderSide(ForgeDirection side, PartSidedPipe transmitter)
+	public void renderSide(ForgeDirection side, PartSidedPipe transmitter, int pass)
 	{
-		boolean connected = PartTransmitter.connectionMapContainsSide(transmitter.getAllCurrentConnections(), side);
-		IIcon renderIcon = transmitter.getIconForSide(side);
-
-		Colour c = null;
-
-		if(transmitter.getRenderColor() != null)
+		if(pass == 1)
 		{
-			c = new ColourRGBA(transmitter.getRenderColor().getColor(0), transmitter.getRenderColor().getColor(1), transmitter.getRenderColor().getColor(2), 1);
+			if(transmitter.transparencyRender())
+			{
+				IIcon renderIcon = transmitter.getIconForSide(side, false);
+				EnumColor color = transmitter.getRenderColor(false);
+		
+				Colour c = null;
+		
+				if(color != null)
+				{
+					c = new ColourRGBA(color.getColor(0), color.getColor(1), color.getColor(2), 1);
+				}
+		
+				renderPart(renderIcon, transmitter.getModelForSide(side, false), transmitter.x(), transmitter.y(), transmitter.z(), c);
+			}
 		}
-
-		renderPart(renderIcon, transmitter.getModelForSide(side, false), transmitter.x(), transmitter.y(), transmitter.z(), c);
+		else {
+			IIcon renderIcon = transmitter.getIconForSide(side, true);
+			EnumColor color = transmitter.getRenderColor(true);
+	
+			Colour c = null;
+	
+			if(color != null)
+			{
+				c = new ColourRGBA(color.getColor(0), color.getColor(1), color.getColor(2), 1);
+			}
+	
+			renderPart(renderIcon, transmitter.getModelForSide(side, false), transmitter.x(), transmitter.y(), transmitter.z(), c);
+		}
 	}
 
-	public void renderSide(ForgeDirection side, TransmitterType type)
+	public void renderSide(ForgeDirection side, TransmitterType type, boolean opaque)
 	{
 		boolean out = side == ForgeDirection.UP || side == ForgeDirection.DOWN;
 
-		IIcon renderIcon = out ? type.getSideIcon() : type.getCenterIcon();
+		IIcon renderIcon = out ? type.getSideIcon(opaque) : type.getCenterIcon(opaque);
 
 		renderPart(renderIcon, getItemModel(side, type), 0, 0, 0, null);
 	}
@@ -532,16 +602,22 @@ public class RenderPartTransmitter implements IIconSelfRegister
 		renderTransparency(MekanismRenderer.energyIcon, cable.getModelForSide(side, true), new ColourRGBA(1.0, 1.0, 1.0, cable.currentPower));
 	}
 
+	public void renderHeatSide(ForgeDirection side, PartHeatTransmitter cable)
+	{
+		CCRenderState.changeTexture(MekanismRenderer.getBlocksTexture());
+		renderTransparency(MekanismRenderer.heatIcon, cable.getModelForSide(side, true), ColourTemperature.fromTemperature(cable.getTransmitter().temperature, cable.getBaseColour()));
+	}
+
 	public void renderFluidInOut(ForgeDirection side, PartMechanicalPipe pipe)
 	{
 		CCRenderState.changeTexture(MekanismRenderer.getBlocksTexture());
-		renderTransparency(pipe.getTransmitterNetwork().refFluid.getIcon(), pipe.getModelForSide(side, true), new ColourRGBA(1.0, 1.0, 1.0, pipe.currentScale));
+		renderTransparency(pipe.getTransmitter().getTransmitterNetwork().refFluid.getIcon(), pipe.getModelForSide(side, true), new ColourRGBA(1.0, 1.0, 1.0, pipe.currentScale));
 	}
 
 	public void renderGasSide(ForgeDirection side, PartPressurizedTube tube)
 	{
 		CCRenderState.changeTexture(MekanismRenderer.getBlocksTexture());
-		renderTransparency(tube.getTransmitterNetwork().refGas.getIcon(), tube.getModelForSide(side, true), new ColourRGBA(1.0, 1.0, 1.0, tube.currentScale));
+		renderTransparency(tube.getTransmitter().getTransmitterNetwork().refGas.getIcon(), tube.getModelForSide(side, true), new ColourRGBA(1.0, 1.0, 1.0, tube.currentScale));
 	}
 
 	public void renderPart(IIcon icon, CCModel cc, double x, double y, double z, Colour color)
@@ -588,6 +664,7 @@ public class RenderPartTransmitter implements IIconSelfRegister
 		PartMechanicalPipe.registerIcons(register);
 		PartPressurizedTube.registerIcons(register);
 		PartLogisticalTransporter.registerIcons(register);
+		PartHeatTransmitter.registerIcons(register);
 	}
 
 	@Override
@@ -632,7 +709,7 @@ public class RenderPartTransmitter implements IIconSelfRegister
 				icon = Blocks.redstone_torch.getIcon(0, 0);
 				break;
 			case 2:
-				icon = Blocks.redstone_torch.getIcon(0, 0);
+				icon = Blocks.unlit_redstone_torch.getIcon(0, 0);
 				break;
 		}
 
@@ -730,5 +807,11 @@ public class RenderPartTransmitter implements IIconSelfRegister
 		display.endList();
 
 		return display;
+	}
+
+	public void resetDisplayInts()
+	{
+		cachedLiquids.clear();
+		cachedOverlays.clear();
 	}
 }

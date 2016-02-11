@@ -1,29 +1,20 @@
 package mekanism.generators.common.block;
 
-import java.util.List;
-import java.util.Random;
-
+import buildcraft.api.tools.IToolWrench;
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
+import mekanism.api.MekanismConfig.general;
 import mekanism.api.energy.IEnergizedItem;
-import mekanism.common.IActiveState;
-import mekanism.common.IBoundingBlock;
-import mekanism.common.ISpecialBounds;
-import mekanism.common.ISustainedData;
-import mekanism.common.ISustainedInventory;
-import mekanism.common.ISustainedTank;
 import mekanism.common.ItemAttacher;
 import mekanism.common.Mekanism;
+import mekanism.common.base.*;
 import mekanism.common.tile.TileEntityBasicBlock;
 import mekanism.common.tile.TileEntityElectricBlock;
+import mekanism.common.util.LangUtils;
 import mekanism.common.util.MekanismUtils;
-import mekanism.generators.client.GeneratorsClientProxy;
+import mekanism.generators.common.GeneratorsBlocks;
 import mekanism.generators.common.MekanismGenerators;
-import mekanism.generators.common.tile.TileEntityAdvancedSolarGenerator;
-import mekanism.generators.common.tile.TileEntityBioGenerator;
-import mekanism.generators.common.tile.TileEntityGasGenerator;
-import mekanism.generators.common.tile.TileEntityHeatGenerator;
-import mekanism.generators.common.tile.TileEntitySolarGenerator;
-import mekanism.generators.common.tile.TileEntityWindTurbine;
-
+import mekanism.generators.common.tile.*;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockContainer;
 import net.minecraft.block.material.Material;
@@ -40,15 +31,10 @@ import net.minecraft.util.MovingObjectPosition;
 import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
 import net.minecraftforge.common.util.ForgeDirection;
-import cpw.mods.fml.common.ModAPIManager;
-import cpw.mods.fml.common.Optional.Interface;
-import cpw.mods.fml.common.Optional.Method;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
 
-import buildcraft.api.tools.IToolWrench;
-import dan200.computercraft.api.peripheral.IPeripheral;
-import dan200.computercraft.api.peripheral.IPeripheralProvider;
+import java.util.List;
+import java.util.Random;
+
 
 /**
  * Block class for handling multiple generator block IDs.
@@ -61,8 +47,7 @@ import dan200.computercraft.api.peripheral.IPeripheralProvider;
  * @author AidanBrady
  *
  */
-@Interface(iface = "dan200.computercraft.api.peripheral.IPeripheralProvider", modid = "ComputerCraft")
-public class BlockGenerator extends BlockContainer implements ISpecialBounds, IPeripheralProvider
+public class BlockGenerator extends BlockContainer implements ISpecialBounds
 {
 	public Random machineRand = new Random();
 
@@ -135,7 +120,7 @@ public class BlockGenerator extends BlockContainer implements ISpecialBounds, IP
 	@Override
 	public int getLightValue(IBlockAccess world, int x, int y, int z)
 	{
-		if(MekanismGenerators.enableAmbientLighting)
+		if(general.enableAmbientLighting)
 		{
 			TileEntity tileEntity = world.getTileEntity(x, y, z);
 
@@ -143,7 +128,7 @@ public class BlockGenerator extends BlockContainer implements ISpecialBounds, IP
 			{
 				if(((IActiveState)tileEntity).getActive() && ((IActiveState)tileEntity).lightUpdate())
 				{
-					return MekanismGenerators.ambientLightingLevel;
+					return general.ambientLightingLevel;
 				}
 			}
 		}
@@ -250,16 +235,18 @@ public class BlockGenerator extends BlockContainer implements ISpecialBounds, IP
 	@Override
 	public boolean canPlaceBlockAt(World world, int x, int y, int z)
 	{
+		//This method doesn't actually seem to be used in MC code...
 		if(world.getBlockMetadata(x, y, z) == GeneratorType.ADVANCED_SOLAR_GENERATOR.meta)
 		{
 			boolean canPlace = super.canPlaceBlockAt(world, x, y, z);
 
 			boolean nonAir = false;
 			nonAir |= world.isAirBlock(x, y, z);
+			nonAir |= world.isAirBlock(x, y+1, x);
 
-			for(int xPos=-1;xPos<=2;xPos++)
+			for(int xPos=-1;xPos<=1;xPos++)
 			{
-				for(int zPos=-1;zPos<=2;zPos++)
+				for(int zPos=-1;zPos<=1;zPos++)
 				{
 					nonAir |= world.isAirBlock(x+xPos, y+2, z+zPos);
 				}
@@ -325,7 +312,7 @@ public class BlockGenerator extends BlockContainer implements ISpecialBounds, IP
 					return true;
 				}
 
-				if(ModAPIManager.INSTANCE.hasAPI("BuildCraftAPI|tools") && tool instanceof IToolWrench)
+				if(MekanismUtils.isBCWrench(tool))
 					((IToolWrench)tool).wrenchUsed(entityplayer, x, y, z);
 
 				int change = ForgeDirection.ROTATION_MATRIX[ForgeDirection.UP.ordinal()][tileEntity.facing];
@@ -336,7 +323,7 @@ public class BlockGenerator extends BlockContainer implements ISpecialBounds, IP
 			}
 		}
 
-		if(metadata == 3 && entityplayer.getCurrentEquippedItem() != null && entityplayer.getCurrentEquippedItem().isItemEqual(new ItemStack(MekanismGenerators.Generator, 1, 2)))
+		if(metadata == 3 && entityplayer.getCurrentEquippedItem() != null && entityplayer.getCurrentEquippedItem().isItemEqual(new ItemStack(GeneratorsBlocks.Generator, 1, 2)))
 		{
 			if(((TileEntityBasicBlock)world.getTileEntity(x, y, z)).facing != side)
 			{
@@ -394,10 +381,9 @@ public class BlockGenerator extends BlockContainer implements ISpecialBounds, IP
 	}
 
 	@Override
-	@SideOnly(Side.CLIENT)
 	public int getRenderType()
 	{
-		return GeneratorsClientProxy.GENERATOR_RENDER_ID;
+		return MekanismGenerators.proxy.GENERATOR_RENDER_ID;
 	}
 
 	/*This method is not used, metadata manipulation is required to create a Tile Entity.*/
@@ -420,6 +406,20 @@ public class BlockGenerator extends BlockContainer implements ISpecialBounds, IP
 			setBlockBounds(0.0F, 0.0F, 0.0F, 1.0F, 1.0F, 1.0F);
 		}
 	}
+	
+	@Override
+	public void onBlockAdded(World world, int x, int y, int z)
+	{
+		TileEntity tileEntity = world.getTileEntity(x, y, z);
+
+		if(!world.isRemote)
+		{
+			if(tileEntity instanceof TileEntityBasicBlock)
+			{
+				((TileEntityBasicBlock)tileEntity).onAdded();
+			}
+		}
+	}
 
 	@Override
 	public boolean removedByPlayer(World world, EntityPlayer player, int x, int y, int z, boolean willHarvest)
@@ -431,7 +431,7 @@ public class BlockGenerator extends BlockContainer implements ISpecialBounds, IP
 			double motionY = (world.rand.nextFloat() * motion) + (1.0F - motion) * 0.5D;
 			double motionZ = (world.rand.nextFloat() * motion) + (1.0F - motion) * 0.5D;
 
-			EntityItem entityItem = new EntityItem(world, x + motionX, y + motionY, z + motionZ, getPickBlock(null, world, x, y, z));
+			EntityItem entityItem = new EntityItem(world, x + motionX, y + motionY, z + motionZ, getPickBlock(null, world, x, y, z, player));
 
 			world.spawnEntityInWorld(entityItem);
 		}
@@ -440,10 +440,10 @@ public class BlockGenerator extends BlockContainer implements ISpecialBounds, IP
 	}
 
 	@Override
-	public ItemStack getPickBlock(MovingObjectPosition target, World world, int x, int y, int z)
+    public ItemStack getPickBlock(MovingObjectPosition target, World world, int x, int y, int z, EntityPlayer player)
 	{
 		TileEntityElectricBlock tileEntity = (TileEntityElectricBlock)world.getTileEntity(x, y, z);
-		ItemStack itemStack = new ItemStack(MekanismGenerators.Generator, 1, world.getBlockMetadata(x, y, z));
+		ItemStack itemStack = new ItemStack(GeneratorsBlocks.Generator, 1, world.getBlockMetadata(x, y, z));
 
 		if(tileEntity == null)
 		{
@@ -477,7 +477,7 @@ public class BlockGenerator extends BlockContainer implements ISpecialBounds, IP
 
 	public ItemStack dismantleBlock(World world, int x, int y, int z, boolean returnBlock)
 	{
-		ItemStack itemStack = getPickBlock(null, world, x, y, z);
+		ItemStack itemStack = getPickBlock(null, world, x, y, z, null);
 
 		world.setBlockToAir(x, y, z);
 
@@ -513,7 +513,7 @@ public class BlockGenerator extends BlockContainer implements ISpecialBounds, IP
 	{
 		HEAT_GENERATOR(0, "HeatGenerator", 0, 160000, TileEntityHeatGenerator.class, true),
 		SOLAR_GENERATOR(1, "SolarGenerator", 1, 96000, TileEntitySolarGenerator.class, true),
-		GAS_GENERATOR(3, "GasGenerator", 3, Mekanism.FROM_H2*100, TileEntityGasGenerator.class, true),
+		GAS_GENERATOR(3, "GasGenerator", 3, general.FROM_H2*100, TileEntityGasGenerator.class, true),
 		BIO_GENERATOR(4, "BioGenerator", 4, 160000, TileEntityBioGenerator.class, true),
 		ADVANCED_SOLAR_GENERATOR(5, "AdvancedSolarGenerator", 1, 200000, TileEntityAdvancedSolarGenerator.class, true),
 		WIND_TURBINE(6, "WindTurbine", 5, 200000, TileEntityWindTurbine.class, true);
@@ -558,12 +558,12 @@ public class BlockGenerator extends BlockContainer implements ISpecialBounds, IP
 		
 		public String getDescription()
 		{
-			return MekanismUtils.localize("tooltip." + name);
+			return LangUtils.localize("tooltip." + name);
 		}
 		
 		public ItemStack getStack()
 		{
-			return new ItemStack(MekanismGenerators.Generator, 1, meta);
+			return new ItemStack(GeneratorsBlocks.Generator, 1, meta);
 		}
 
 		@Override
@@ -596,9 +596,11 @@ public class BlockGenerator extends BlockContainer implements ISpecialBounds, IP
 	{
 		TileEntity tile = world.getTileEntity(x, y, z);
 		ForgeDirection[] valid = new ForgeDirection[6];
+		
 		if(tile instanceof TileEntityBasicBlock)
 		{
 			TileEntityBasicBlock basicTile = (TileEntityBasicBlock)tile;
+			
 			for(ForgeDirection dir : ForgeDirection.VALID_DIRECTIONS)
 			{
 				if(basicTile.canSetFacing(dir.ordinal()))
@@ -607,6 +609,7 @@ public class BlockGenerator extends BlockContainer implements ISpecialBounds, IP
 				}
 			}
 		}
+		
 		return valid;
 	}
 
@@ -614,29 +617,18 @@ public class BlockGenerator extends BlockContainer implements ISpecialBounds, IP
 	public boolean rotateBlock(World world, int x, int y, int z, ForgeDirection axis)
 	{
 		TileEntity tile = world.getTileEntity(x, y, z);
+		
 		if(tile instanceof TileEntityBasicBlock)
 		{
 			TileEntityBasicBlock basicTile = (TileEntityBasicBlock)tile;
+			
 			if(basicTile.canSetFacing(axis.ordinal()))
 			{
 				basicTile.setFacing((short)axis.ordinal());
 				return true;
 			}
 		}
+		
 		return false;
-	}
-
-	@Override
-	@Method(modid = "ComputerCraft")
-	public IPeripheral getPeripheral(World world, int x, int y, int z, int side)
-	{
-		TileEntity te = world.getTileEntity(x, y, z);
-
-		if(te != null && te instanceof IPeripheral)
-		{
-			return (IPeripheral)te;
-		}
-
-		return null;
 	}
 }

@@ -1,21 +1,12 @@
 package mekanism.common.tile;
 
-import java.util.ArrayList;
-
+import io.netty.buffer.ByteBuf;
 import mekanism.api.Coord4D;
-import mekanism.api.gas.Gas;
-import mekanism.api.gas.GasRegistry;
-import mekanism.api.gas.GasStack;
-import mekanism.api.gas.GasTank;
-import mekanism.api.gas.GasTransmission;
-import mekanism.api.gas.IGasHandler;
-import mekanism.api.gas.IGasItem;
-import mekanism.api.gas.ITubeConnection;
-import mekanism.common.IRedstoneControl;
+import mekanism.api.gas.*;
 import mekanism.common.Mekanism;
+import mekanism.common.base.IRedstoneControl;
 import mekanism.common.network.PacketTileEntity.TileEntityMessage;
 import mekanism.common.util.MekanismUtils;
-
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.item.ItemStack;
@@ -24,11 +15,11 @@ import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.MathHelper;
 import net.minecraftforge.common.util.ForgeDirection;
 
-import io.netty.buffer.ByteBuf;
+import java.util.ArrayList;
 
 public class TileEntityGasTank extends TileEntityContainerBlock implements IGasHandler, ITubeConnection, IRedstoneControl
 {
-	public enum Mode
+	public enum GasMode
 	{
 		IDLE,
 		DUMPING,
@@ -43,7 +34,7 @@ public class TileEntityGasTank extends TileEntityContainerBlock implements IGasH
 	/** How fast this tank can output gas. */
 	public int output = 256;
 
-	public Mode dumping;
+	public GasMode dumping;
 
 	public int currentGasAmount;
 
@@ -53,8 +44,9 @@ public class TileEntityGasTank extends TileEntityContainerBlock implements IGasH
 	public TileEntityGasTank()
 	{
 		super("GasTank");
+		
 		inventory = new ItemStack[2];
-		dumping = Mode.IDLE;
+		dumping = GasMode.IDLE;
 		controlType = RedstoneControl.DISABLED;
 	}
 
@@ -71,7 +63,7 @@ public class TileEntityGasTank extends TileEntityContainerBlock implements IGasH
 			gasTank.receive(GasTransmission.removeGas(inventory[1], gasTank.getGasType(), gasTank.getNeeded()), true);
 		}
 
-		if(!worldObj.isRemote && gasTank.getGas() != null && MekanismUtils.canFunction(this))
+		if(!worldObj.isRemote && gasTank.getGas() != null && MekanismUtils.canFunction(this) && dumping != GasMode.DUMPING)
 		{
 			GasStack toSend = new GasStack(gasTank.getGas().getGas(), Math.min(gasTank.getStored(), output));
 
@@ -81,29 +73,29 @@ public class TileEntityGasTank extends TileEntityContainerBlock implements IGasH
 			{
 				if(((IGasHandler)tileEntity).canReceiveGas(ForgeDirection.getOrientation(facing).getOpposite(), gasTank.getGas().getGas()))
 				{
-					gasTank.draw(((IGasHandler)tileEntity).receiveGas(ForgeDirection.getOrientation(facing).getOpposite(), toSend), true);
+					gasTank.draw(((IGasHandler)tileEntity).receiveGas(ForgeDirection.getOrientation(facing).getOpposite(), toSend, true), true);
 				}
 			}
 		}
 
-		if(!worldObj.isRemote && dumping.equals(Mode.DUMPING))
+		if(!worldObj.isRemote && dumping == GasMode.DUMPING)
 		{
 			gasTank.draw(8, true);
 		}
 
-		if(!worldObj.isRemote && dumping.equals(Mode.DUMPING_EXCESS) && gasTank.getNeeded() < output)
+		if(!worldObj.isRemote && dumping == GasMode.DUMPING_EXCESS && gasTank.getNeeded() < output)
 		{
-			gasTank.draw(output, true);
+			gasTank.draw(output-gasTank.getNeeded(), true);
 		}
 		
 		if(!worldObj.isRemote)
 		{
 			int newGasAmount = gasTank.getStored();
 			
-			if(newGasAmount != this.currentGasAmount)
+			if(newGasAmount != currentGasAmount)
 			{
 				markDirty();
-				this.currentGasAmount = newGasAmount;
+				currentGasAmount = newGasAmount;
 			}
 		}
 	}
@@ -146,15 +138,27 @@ public class TileEntityGasTank extends TileEntityContainerBlock implements IGasH
 	}
 
 	@Override
+	public int receiveGas(ForgeDirection side, GasStack stack, boolean doTransfer)
+	{
+		return gasTank.receive(stack, doTransfer);
+	}
+
+	@Override
 	public int receiveGas(ForgeDirection side, GasStack stack)
 	{
-		return gasTank.receive(stack, true);
+		return receiveGas(side, stack, true);
+	}
+
+	@Override
+	public GasStack drawGas(ForgeDirection side, int amount, boolean doTransfer)
+	{
+		return null;
 	}
 
 	@Override
 	public GasStack drawGas(ForgeDirection side, int amount)
 	{
-		return null;
+		return drawGas(side, amount, true);
 	}
 
 	@Override
@@ -184,7 +188,7 @@ public class TileEntityGasTank extends TileEntityContainerBlock implements IGasH
 			if(type == 0)
 			{
 				int index = (dumping.ordinal() + 1)%dumping.values().length;
-				dumping = Mode.values()[index];
+				dumping = GasMode.values()[index];
 			}
 
 			for(EntityPlayer player : playersUsing)
@@ -201,12 +205,11 @@ public class TileEntityGasTank extends TileEntityContainerBlock implements IGasH
 		{
 			gasTank.setGas(new GasStack(GasRegistry.getGas(dataStream.readInt()), dataStream.readInt()));
 		}
-		else
-		{
+		else {
 			gasTank.setGas(null);
 		}
 
-		dumping = Mode.values()[dataStream.readInt()];
+		dumping = GasMode.values()[dataStream.readInt()];
 		controlType = RedstoneControl.values()[dataStream.readInt()];
 
 		MekanismUtils.updateBlock(worldObj, xCoord, yCoord, zCoord);
@@ -218,22 +221,8 @@ public class TileEntityGasTank extends TileEntityContainerBlock implements IGasH
 		super.readFromNBT(nbtTags);
 
 		gasTank.read(nbtTags.getCompoundTag("gasTank"));
-		if(nbtTags.hasKey("dumpingMode"))
-		{
-			dumping = Mode.valueOf(nbtTags.getString("dumpingMode"));
-		}
-		else //For backwards compatibility
-		{
-			boolean dumpingBool = nbtTags.getBoolean("dumping");
-			if(dumpingBool)
-			{
-				dumping = Mode.DUMPING;
-			}
-			else
-			{
-				dumping = Mode.IDLE;
-			}
-		}
+		dumping = GasMode.values()[nbtTags.getInteger("dumping")];
+		
 		controlType = RedstoneControl.values()[nbtTags.getInteger("controlType")];
 	}
 
@@ -243,7 +232,7 @@ public class TileEntityGasTank extends TileEntityContainerBlock implements IGasH
 		super.writeToNBT(nbtTags);
 
 		nbtTags.setTag("gasTank", gasTank.write(new NBTTagCompound()));
-		nbtTags.setString("dumpingMode", dumping.name());
+		nbtTags.setInteger("dumping", dumping.ordinal());
 		nbtTags.setInteger("controlType", controlType.ordinal());
 	}
 
@@ -258,8 +247,7 @@ public class TileEntityGasTank extends TileEntityContainerBlock implements IGasH
 			data.add(gasTank.getGas().getGas().getID());
 			data.add(gasTank.getStored());
 		}
-		else
-		{
+		else {
 			data.add(false);
 		}
 
@@ -283,11 +271,8 @@ public class TileEntityGasTank extends TileEntityContainerBlock implements IGasH
 
 	public int getRedstoneLevel()
 	{
-		int stored = gasTank.getStored();
-		
-		if(stored == 0) return 0;
-		
-		return MathHelper.floor_float((float)stored / (float)MAX_GAS * 14.0f + 1.0f);
+        double fractionFull = (float)gasTank.getStored()/(float)gasTank.getMaxGas();
+        return MathHelper.floor_float((float)(fractionFull * 14.0F)) + (fractionFull > 0 ? 1 : 0);
 	}
 	
 	@Override
@@ -300,5 +285,11 @@ public class TileEntityGasTank extends TileEntityContainerBlock implements IGasH
 	public void setControlType(RedstoneControl type)
 	{
 		controlType = type;
+	}
+
+	@Override
+	public boolean canPulse()
+	{
+		return false;
 	}
 }

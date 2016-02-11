@@ -2,21 +2,28 @@ package mekanism.client.gui;
 
 import java.util.List;
 
-import mekanism.api.ListUtils;
 import mekanism.api.gas.GasStack;
-import mekanism.client.gui.GuiEnergyInfo.IInfoHandler;
+import mekanism.api.util.ListUtils;
+import mekanism.client.gui.element.GuiEnergyInfo;
+import mekanism.client.gui.element.GuiEnergyInfo.IInfoHandler;
+import mekanism.client.gui.element.GuiRecipeType;
+import mekanism.client.gui.element.GuiRedstoneControl;
+import mekanism.client.gui.element.GuiSideConfigurationTab;
+import mekanism.client.gui.element.GuiSortingTab;
+import mekanism.client.gui.element.GuiTransporterConfigTab;
+import mekanism.client.gui.element.GuiUpgradeTab;
 import mekanism.client.render.MekanismRenderer;
-import mekanism.common.IFactory.RecipeType;
 import mekanism.common.Tier.FactoryTier;
 import mekanism.common.inventory.container.ContainerFactory;
 import mekanism.common.tile.TileEntityFactory;
+import mekanism.common.util.LangUtils;
 import mekanism.common.util.MekanismUtils;
-
 import net.minecraft.entity.player.InventoryPlayer;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
 
 import org.lwjgl.opengl.GL11;
+
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
 
 @SideOnly(Side.CLIENT)
 public class GuiFactory extends GuiMekanism
@@ -31,16 +38,17 @@ public class GuiFactory extends GuiMekanism
 		ySize += 11;
 
 		guiElements.add(new GuiRedstoneControl(this, tileEntity, tileEntity.tier.guiLocation));
-		guiElements.add(new GuiUpgradeManagement(this, tileEntity, tileEntity.tier.guiLocation));
+		guiElements.add(new GuiUpgradeTab(this, tileEntity, tileEntity.tier.guiLocation));
 		guiElements.add(new GuiRecipeType(this, tileEntity, tileEntity.tier.guiLocation));
-		guiElements.add(new GuiConfigurationTab(this, tileEntity, tileEntity.tier.guiLocation));
+		guiElements.add(new GuiSideConfigurationTab(this, tileEntity, tileEntity.tier.guiLocation));
+		guiElements.add(new GuiTransporterConfigTab(this, 34, tileEntity, tileEntity.tier.guiLocation));
 		guiElements.add(new GuiSortingTab(this, tileEntity, tileEntity.tier.guiLocation));
 		guiElements.add(new GuiEnergyInfo(new IInfoHandler() {
 			@Override
 			public List<String> getInfo()
 			{
-				String multiplier = MekanismUtils.getEnergyDisplay(MekanismUtils.getEnergyPerTick(tileEntity, tileEntity.ENERGY_PER_TICK));
-				return ListUtils.asList("Using: " + multiplier + "/t", "Needed: " + MekanismUtils.getEnergyDisplay(tileEntity.getMaxEnergy()-tileEntity.getEnergy()));
+				String multiplier = MekanismUtils.getEnergyDisplay(tileEntity.energyPerTick);
+				return ListUtils.asList(LangUtils.localize("gui.using") + ": " + multiplier + "/t", LangUtils.localize("gui.needed") + ": " + MekanismUtils.getEnergyDisplay(tileEntity.getMaxEnergy()-tileEntity.getEnergy()));
 			}
 		}, this, tileEntity.tier.guiLocation));
 	}
@@ -51,9 +59,8 @@ public class GuiFactory extends GuiMekanism
 		int xAxis = (mouseX - (width - xSize) / 2);
 		int yAxis = (mouseY - (height - ySize) / 2);
 
-		fontRendererObj.drawString(tileEntity.getInventoryName(), 48, 4, 0x404040);
-		fontRendererObj.drawString(MekanismUtils.localize("container.inventory"), 8, (ySize - 93) + 2, 0x404040);
-		fontRendererObj.drawString(RecipeType.values()[tileEntity.recipeType].getName(), 104, (ySize - 93) + 2, 0x404040);
+		fontRendererObj.drawString(tileEntity.getInventoryName(), (xSize/2)-(fontRendererObj.getStringWidth(tileEntity.getInventoryName())/2), 4, 0x404040);
+		fontRendererObj.drawString(LangUtils.localize("container.inventory"), 8, (ySize - 93) + 2, 0x404040);
 
 		if(xAxis >= 165 && xAxis <= 169 && yAxis >= 17 && yAxis <= 69)
 		{
@@ -62,7 +69,7 @@ public class GuiFactory extends GuiMekanism
 
 		if(xAxis >= 8 && xAxis <= 168 && yAxis >= 78 && yAxis <= 83)
 		{
-			drawCreativeTabHoveringText(tileEntity.gasTank.getGas() != null ? tileEntity.gasTank.getGas().getGas().getLocalizedName() + ": " + tileEntity.gasTank.getStored() : MekanismUtils.localize("gui.none"), xAxis, yAxis);
+			drawCreativeTabHoveringText(tileEntity.gasTank.getGas() != null ? tileEntity.gasTank.getGas().getGas().getLocalizedName() + ": " + tileEntity.gasTank.getStored() : LangUtils.localize("gui.none"), xAxis, yAxis);
 		}
 
 		super.drawGuiContainerForegroundLayer(mouseX, mouseY);
